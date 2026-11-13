@@ -1,4 +1,5 @@
 mod daemon;
+mod shell;
 use clap::{Parser, Subcommand};
 use std::{
     path::PathBuf,
@@ -24,6 +25,12 @@ enum Action {
         #[arg(value_parser=["zsh"])]
         shell: String,
     },
+    Shell {
+        #[arg(long)]
+        no_rc: bool,
+        #[arg(long)]
+        login: bool,
+    },
     Doctor,
     Reload,
     Stats {
@@ -32,11 +39,16 @@ enum Action {
     },
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    unsafe {
-        libc::umask(0o077);
-    }
+    let original_umask = unsafe { libc::umask(0o077) };
     let cli = Cli::parse();
     match cli.command {
+        Action::Shell { no_rc, login } => {
+            unsafe {
+                libc::umask(original_umask);
+            }
+            let code = shell::run(no_rc, login)?;
+            std::process::exit(code);
+        }
         Action::SocketNonblock => {
             // File status flags belong to the shared open file description:
             // stdin is a dup of zsh's socket, so this also makes its fd nonblocking.

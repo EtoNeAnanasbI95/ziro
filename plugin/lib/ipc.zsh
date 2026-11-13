@@ -44,8 +44,9 @@ _ziro_read() {
     case $f[1] in
       CFG) _ziro_arrows=$f[2] _ziro_enter_accepts=$f[3]; _ziro_cfg_keys=("${f[@]:4}") ;;
       FRAME) (( _ziro_inflight > 0 )) && (( _ziro_inflight-- )); [[ $f[2] == $_ziro_gen && $_ziro_hidden != "$BUFFER" ]] && _ziro_frame "${f[@]}" ;;
+      WAIT) (( _ziro_inflight > 0 )) && (( _ziro_inflight-- )) ;;
       CLEAR) (( _ziro_inflight > 0 )) && (( _ziro_inflight-- )); [[ $f[2] == $_ziro_gen ]] && _ziro_clear ;;
-      ERR) _ziro_clear; [[ $f[2] == worker_timeout ]] && _ziro_worker_stop; [[ $f[2] == worker_cwd ]] && _ziro_worker_start ;;
+      ERR) _ziro_clear; [[ $f[2] == worker_timeout ]] && _ziro_worker_stop; [[ $f[2] == worker_cwd || $f[2] == worker_restart ]] && _ziro_worker_start ;;
     esac
   done
   zle && zle -R

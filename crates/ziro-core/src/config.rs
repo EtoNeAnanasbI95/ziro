@@ -20,10 +20,11 @@ macro_rules! config_section {
 }
 config_section!(Menu {
     max_items: usize = 8,
+    max_width: usize = 48,
     min_prefix_first_word: usize = 1,
     show_descriptions: bool = true,
     border: String = "rounded".into(),
-    icons: String = "unicode".into(),
+    icons: String = "emoji".into(),
     enter_accepts: String = "explicit".into()
 });
 config_section!(Ghost {
@@ -43,7 +44,7 @@ config_section!(Theme {
     selected: String = "bg=4,fg=15".into(),
     r#match: String = "fg=3,bold".into(),
     description: String = "fg=8".into(),
-    border: String = "fg=8".into(),
+    border: String = "fg=4".into(),
     ghost: String = "fg=8".into()
 });
 impl Config {

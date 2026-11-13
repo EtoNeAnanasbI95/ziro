@@ -44,7 +44,18 @@ _ziro_capture() {
         if [[ -d $_ziro_path && $_ziro_word != */ ]]; then _ziro_word+=/; fi
       fi
       [[ $_ziro_word == *[$'\0\x1f\x1e']* || $_ziro_desc == *[$'\0\x1f\x1e']* ]] && continue
-      _ziro_records+=("C${_ziro_us}${_ziro_group}${_ziro_us}${_ziro_tag}${_ziro_us}${_ziro_word}${_ziro_us}${_ziro_desc}${_ziro_us}${_ziro_us}${_ziro_flags}${_ziro_us}${_ziro_p}${_ziro_us}${_ziro_s}")
+      local _ziro_word_tag=$_ziro_tag
+      if (( CURRENT == 1 )); then
+        if (( $+aliases[$_ziro_word] )); then _ziro_word_tag=aliases
+        elif (( $+functions[$_ziro_word] )); then _ziro_word_tag=functions
+        elif (( $+builtins[$_ziro_word] )); then _ziro_word_tag=builtins
+        elif (( $+reswords[$_ziro_word] )); then _ziro_word_tag=reserved-words
+        elif (( $+commands[$_ziro_word] )); then _ziro_word_tag=commands
+        fi
+      elif [[ $_ziro_word_tag == *commands* ]]; then
+        _ziro_word_tag=subcommands
+      fi
+      _ziro_records+=("C${_ziro_us}${_ziro_group}${_ziro_us}${_ziro_word_tag}${_ziro_us}${_ziro_word}${_ziro_us}${_ziro_desc}${_ziro_us}${_ziro_us}${_ziro_flags}${_ziro_us}${_ziro_p}${_ziro_us}${_ziro_s}")
     done
     # Let compsys observe matches, while suppressing insertion/listing below.
     builtin compadd "${_ziro_args[@]}"
@@ -93,6 +104,7 @@ _ziro_worker_main() {
   (( LINES > 0 )) || LINES=24
   typeset -ga precmd_functions=() preexec_functions=() zshexit_functions=()
   unfunction zshexit 2>/dev/null
+  if [[ -n ${_ziro_ui_fd:-} ]]; then exec {_ziro_ui_fd}>&-; _ziro_ui_fd=''; fi
   if [[ -n ${_ziro_fd:-} ]]; then
     zle -F $_ziro_fd 2>/dev/null
     exec {_ziro_fd}>&-

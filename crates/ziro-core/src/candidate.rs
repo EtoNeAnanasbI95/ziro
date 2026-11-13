@@ -2,12 +2,35 @@ use ziro_proto::Message;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Command,
+    Subcommand,
+    Alias,
+    Function,
+    Builtin,
+    Keyword,
     Option,
     Directory,
     File,
     Branch,
     History,
     Argument,
+}
+impl Kind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Command => "binary",
+            Self::Subcommand => "subcommand",
+            Self::Alias => "alias",
+            Self::Function => "function",
+            Self::Builtin => "builtin",
+            Self::Keyword => "keyword",
+            Self::Directory => "directory",
+            Self::File => "file",
+            Self::Branch => "branch",
+            Self::History => "history",
+            Self::Option => "option",
+            Self::Argument => "argument",
+        }
+    }
 }
 #[derive(Debug, Clone, Default)]
 pub struct Context {
@@ -43,7 +66,17 @@ pub fn kind_of(tag: &str, flags: &str, word: &str) -> Kind {
         Kind::Branch
     } else if word.starts_with('-') || tag.contains("option") {
         Kind::Option
-    } else if tag.contains("command") {
+    } else if tag.contains("alias") {
+        Kind::Alias
+    } else if tag.contains("function") {
+        Kind::Function
+    } else if tag.contains("builtin") {
+        Kind::Builtin
+    } else if tag.contains("reserved-word") {
+        Kind::Keyword
+    } else if tag.contains("subcommand") {
+        Kind::Subcommand
+    } else if tag.contains("command") || tag.contains("executable") {
         Kind::Command
     } else if flags.contains('f') || tag.contains("file") {
         Kind::File
@@ -109,6 +142,10 @@ mod tests {
             ("", "", "--color=auto", Kind::Option),
             ("files", "f", "x", Kind::File),
             ("commands", "", "git", Kind::Command),
+            ("aliases", "", "g", Kind::Alias),
+            ("functions", "", "deploy", Kind::Function),
+            ("builtins", "", "cd", Kind::Builtin),
+            ("reserved-words", "", "if", Kind::Keyword),
         ] {
             assert_eq!(kind_of(tag, flags, word), want);
         }

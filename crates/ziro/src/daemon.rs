@@ -34,6 +34,7 @@ struct Session {
     keymap: String,
     cwd: String,
     worker_cwd: String,
+    worker_failed: bool,
     flags: String,
     cache_key: String,
     context: Context,
@@ -140,7 +141,7 @@ fn request(s: &mut Session) {
     s.busy = Some((s.generation, Instant::now()));
     s.pending = false;
 }
-fn frame(s: &mut Session, h: &HistoryStore, c: &Config) {
+fn frame(s: &mut Session, h: &HistoryStore, c: &Config, waiting: bool) {
     let q = Query::parse(&s.buffer, s.cursor);
     let history = h
         .prefix_matches(&s.buffer, &s.cwd, now(), 8)
@@ -158,7 +159,21 @@ fn frame(s: &mut Session, h: &HistoryStore, c: &Config) {
         ""
     };
     if !visible && ghost.is_empty() {
-        send(&s.shell, Message::new("CLEAR", [s.generation]));
+        let can_complete = !s.buffer.is_empty()
+            && s.keymap != "vicmd"
+            && !s.flags.contains('h')
+            && !q.word.contains(['*', '?', '[']);
+        send(
+            &s.shell,
+            Message::new(
+                if waiting && can_complete {
+                    "WAIT"
+                } else {
+                    "CLEAR"
+                },
+                [s.generation],
+            ),
+        );
         return;
     }
     let f = layout::layout(
@@ -237,6 +252,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                     session_id = m.field(0).into();
                     worker = true;
                     if let Some(s) = st.sessions.get_mut(&session_id) {
+                        s.worker_failed = false;
                         s.worker_cwd = m.field(1).into();
                         s.worker = Some(tx.clone());
                         if s.pending {
@@ -300,6 +316,23 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                             }
                             s.flags = m.field(6).into();
                             s.buffer = m.field(7).into();
+                            if s.worker_failed
+                                && !s.buffer.is_empty()
+                                && !s.flags.contains('h')
+                                && s.keymap != "vicmd"
+                            {
+                                s.worker_failed = false;
+                                send(
+                                    &s.shell,
+                                    Message::new(
+                                        "ERR",
+                                        [
+                                            "worker_restart",
+                                            "restart completion worker after failure",
+                                        ],
+                                    ),
+                                );
+                            }
                             s.selected = 0;
                             let q = Query::parse(&s.buffer, s.cursor);
                             let key = q.cache_key(&s.buffer, &s.cwd);
@@ -308,7 +341,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                                 s.cache_key = key;
                                 s.candidates.clear();
                             }
-                            frame(&mut s, &st.history, &st.config);
+                            frame(&mut s, &st.history, &st.config, true);
                             if changed || s.candidates.is_empty() {
                                 request(&mut s);
                             }
@@ -344,7 +377,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                                 {
                                     s.candidates = std::mem::take(&mut s.batch);
                                     s.context = s.batch_context.clone();
-                                    frame(&mut s, &st.history, &st.config);
+                                    frame(&mut s, &st.history, &st.config, false);
                                 }
                                 if s.pending {
                                     request(&mut s);
@@ -370,7 +403,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                                 }
                                 _ => {}
                             }
-                            frame(&mut s, &st.history, &st.config);
+                            frame(&mut s, &st.history, &st.config, false);
                         }
                         _ => {}
                     }
@@ -388,6 +421,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
         {
             s.worker = None;
             s.busy = None;
+            s.worker_failed = true;
         }
     } else {
         st.sessions.remove(&session_id);
@@ -495,6 +529,7 @@ pub async fn serve(path: &Path, config: Config) -> Result<(), Box<dyn std::error
                 if s.busy.is_some_and(|(_, t)| t.elapsed() > timeout) {
                     s.busy = None;
                     s.worker = None;
+                    s.worker_failed = true;
                     send(
                         &s.shell,
                         Message::new("ERR", ["worker_timeout", "completion exceeded budget"]),

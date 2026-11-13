@@ -18,7 +18,7 @@ _ziro_fallback() {
   fi
 }
 _ziro_accept() {
-  (( _ziro_visible )) || return 1
+  (( _ziro_visible && !_ziro_stale )) || return 1
   BUFFER=$_ziro_buffers[_ziro_selected] CURSOR=$_ziro_cursors[_ziro_selected]
   _ziro_clear
   _ziro_hidden='' _ziro_previous_cursor=-1 _ziro_navigated=0
@@ -41,7 +41,7 @@ _ziro_dispatch() {
   fi
   if [[ $action == enter_menu ]]; then _ziro_explicit=1; _ziro_hidden=''; _ziro_previous_cursor=-1; _ziro_redraw; return; fi
   if [[ $action == dismiss && $_ziro_visible == 1 ]]; then _ziro_hidden=$BUFFER; _ziro_send KEY $_ziro_gen dismiss; _ziro_clear; [[ $KEYMAP == viins ]] && _ziro_fallback; return; fi
-  if (( !_ziro_visible )) || [[ $_ziro_arrows == explicit && $_ziro_explicit == 0 ]]; then _ziro_fallback; return; fi
+  if (( !_ziro_visible || _ziro_stale )) || [[ $_ziro_arrows == explicit && $_ziro_explicit == 0 ]]; then _ziro_fallback; return; fi
   case $action in
     accept) _ziro_accept ;;
     enter) if [[ $_ziro_enter_accepts == always || ( $_ziro_enter_accepts == explicit && $_ziro_navigated == 1 ) ]]; then _ziro_accept; else _ziro_clear; _ziro_fallback; fi ;;

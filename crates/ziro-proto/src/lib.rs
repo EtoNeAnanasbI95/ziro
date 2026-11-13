@@ -59,8 +59,10 @@ impl Message {
             "REQ" => count == 3,
             "CFG" => count >= 3,
             "FRAME" => count >= 6,
-            "CLEAR" => count == 1,
+            "CLEAR" | "WAIT" => count == 1,
             "ERR" => count == 2,
+            "UI_STATE" | "UI_CLEAR" => count == 1,
+            "UI_SELECT" => count == 2,
             _ => false,
         };
         if !valid {
@@ -74,9 +76,9 @@ impl Message {
         let numeric: &[usize] = match self.kind.as_str() {
             "HELLO" => &[2],
             "CTX" => &[0, 1, 2, 3],
-            "KEY" | "CLEAR" | "END" => &[0],
+            "KEY" | "CLEAR" | "WAIT" | "END" | "UI_CLEAR" | "UI_STATE" => &[0],
             "HIST_END" => &[2],
-            "REQ" => &[0, 1],
+            "REQ" | "UI_SELECT" => &[0, 1],
             "CANDS" => &[0, 6],
             "CFG" => &[2],
             "FRAME" => &[0, 1, 2, 3, 5],
@@ -158,7 +160,7 @@ macro_rules! messages {
 }
 messages!(ShellMsg{Hello=>"HELLO",Ctx=>"CTX",Key=>"KEY",HistStart=>"HIST_START",HistEnd=>"HIST_END",Trace=>"TRACE",Bye=>"BYE"});
 messages!(WorkerMsg{Hello=>"WORKER_HELLO",Candidates=>"CANDS",Candidate=>"C",End=>"END"});
-messages!(DaemonMsg{Request=>"REQ",Config=>"CFG",Frame=>"FRAME",Clear=>"CLEAR",Error=>"ERR"});
+messages!(DaemonMsg{Request=>"REQ",Config=>"CFG",Frame=>"FRAME",Clear=>"CLEAR",Wait=>"WAIT",Error=>"ERR"});
 #[derive(Default)]
 pub struct Framer {
     tail: Vec<u8>,
@@ -202,6 +204,7 @@ mod tests {
             "CFG|menu|explicit|32|^I",
             "FRAME|1|0|0|1|меню|1|0 4 fg=8|0|4|git checkout |13",
             "CLEAR|1",
+            "WAIT|1",
             "ERR|proto|wrong version",
         ];
         for example in examples {

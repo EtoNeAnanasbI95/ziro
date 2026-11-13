@@ -8,20 +8,49 @@ _ziro_remove_highlights() {
   fi
   _ziro_highlights=()
 }
+_ziro_invalidate() {
+  # Keep the last visual frame until its replacement is available. Old
+  # prepared buffers must never remain actionable after the edit.
+  _ziro_stale=1
+  _ziro_remove_highlights
+  if (( _ziro_ghost_len )); then
+    local shift=$_ziro_ghost_len spec start end style
+    local -a kept=()
+    POSTDISPLAY=${POSTDISPLAY[$((shift+1)),-1]}
+    for spec in "${_ziro_base_highlights[@]}"; do
+      start=${spec%% *}; spec=${spec#* }; end=${spec%% *}; style=${spec#* }
+      (( end <= shift )) && continue
+      kept+=("$(( start-shift )) $(( end-shift )) $style")
+    done
+    _ziro_base_highlights=("${kept[@]}")
+    local i
+    for (( i=1; i<=$#_ziro_row_starts; i++ )); do
+      (( _ziro_row_starts[i]-=shift, _ziro_row_ends[i]-=shift ))
+    done
+  fi
+  _ziro_ghost='' _ziro_ghost_len=0
+  _ziro_paint
+}
 _ziro_clear() {
+  _ziro_ui_send UI_CLEAR ${_ziro_gen:-0}
   POSTDISPLAY=''
   _ziro_remove_highlights
-  _ziro_visible=0 _ziro_ghost='' _ziro_ghost_len=0
+  _ziro_visible=0 _ziro_stale=0 _ziro_ghost='' _ziro_ghost_len=0
   _ziro_buffers=() _ziro_cursors=() _ziro_base_highlights=()
 }
 _ziro_frame() {
   local -a f=("$@")
+  _ziro_stale=0
   _ziro_remove_highlights
   local prior_selected=$_ziro_selected prior_buffers="${(pj:\x1f:)_ziro_buffers}"
   _ziro_ghost_len=$f[3] _ziro_selected=$(( f[4]+1 ))
   local rows=$f[5] nhl=$f[7] i offset=8
   POSTDISPLAY=$f[6]
   _ziro_ghost=${POSTDISPLAY[1,$_ziro_ghost_len]}
+  if (( _ziro_overlay_mode )); then
+    _ziro_ui_send "${f[@]}"
+    POSTDISPLAY=$_ziro_ghost
+  fi
   _ziro_visible=$(( rows>0 ))
   _ziro_base_highlights=()
   for (( i=0; i<nhl; i++ )); do _ziro_base_highlights+=("$f[$((offset+i))]"); done
@@ -41,11 +70,13 @@ _ziro_paint() {
   is-at-least 5.9 && memo=' memo=ziro'
   for spec in "${_ziro_base_highlights[@]}"; do
     start=${spec%% *}; spec=${spec#* }; end=${spec%% *}; style=${spec#* }
+    (( _ziro_overlay_mode && end>_ziro_ghost_len )) && continue
     [[ $style == *bg=* ]] && continue
     _ziro_highlights+=("$(( ${#BUFFER}+start )) $(( ${#BUFFER}+end )) $style$memo")
   done
-  if (( _ziro_visible )); then
+  if (( _ziro_visible && !_ziro_overlay_mode )); then
     _ziro_highlights+=("$(( ${#BUFFER}+_ziro_row_starts[_ziro_selected] )) $(( ${#BUFFER}+_ziro_row_ends[_ziro_selected] )) bg=4,fg=15$memo")
   fi
   region_highlight+=("${_ziro_highlights[@]}")
+  if (( _ziro_overlay_mode && !_ziro_stale )); then _ziro_ui_send UI_SELECT $_ziro_gen $(( _ziro_selected-1 )); fi
 }

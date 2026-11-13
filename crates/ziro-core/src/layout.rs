@@ -52,6 +52,42 @@ fn truncate(s: &str, width: usize) -> String {
     out.push('…');
     out
 }
+fn icon(kind: Kind, config: &Config) -> &'static str {
+    if config.menu.icons == "none" {
+        ""
+    } else {
+        match kind {
+            Kind::Directory if config.menu.icons == "emoji" => "📁 ",
+            Kind::File if config.menu.icons == "emoji" => "📄 ",
+            Kind::Command if config.menu.icons == "emoji" => "⚙️ ",
+            Kind::Subcommand if config.menu.icons == "emoji" => "↪️ ",
+            Kind::Alias if config.menu.icons == "emoji" => "🔗 ",
+            Kind::Function if config.menu.icons == "emoji" => "🧩 ",
+            Kind::Builtin if config.menu.icons == "emoji" => "🐚 ",
+            Kind::Keyword if config.menu.icons == "emoji" => "🔑 ",
+            Kind::Branch if config.menu.icons == "emoji" => "🌿 ",
+            Kind::History if config.menu.icons == "emoji" => "🕘 ",
+            Kind::Option if config.menu.icons == "emoji" => "🔧 ",
+            Kind::Directory => "/ ",
+            Kind::Branch => "⎇ ",
+            Kind::History => "↺ ",
+            Kind::Command => "› ",
+            Kind::Subcommand => "↳ ",
+            Kind::Alias => "@ ",
+            Kind::Function => "ƒ ",
+            Kind::Builtin => "$ ",
+            Kind::Keyword => "# ",
+            _ => "  ",
+        }
+    }
+}
+fn description(c: &Candidate) -> String {
+    clean(if c.description.is_empty() {
+        c.kind.label()
+    } else {
+        &c.description
+    })
+}
 #[allow(clippy::too_many_arguments)]
 pub fn layout(
     generation: u64,
@@ -86,7 +122,25 @@ pub fn layout(
         .saturating_sub(count / 2)
         .min(candidates.len() - count);
     f.selected = selected - first;
-    let width = cols.saturating_sub(1).min(78);
+    let content_width = candidates
+        .iter()
+        .skip(first)
+        .take(count)
+        .map(|c| {
+            icon(c.kind, config).width()
+                + clean(&c.display).width()
+                + if config.menu.show_descriptions {
+                    2 + description(c).width()
+                } else {
+                    0
+                }
+        })
+        .max()
+        .unwrap_or(0);
+    let width = cols
+        .saturating_sub(1)
+        .min(config.menu.max_width.max(5))
+        .min((content_width + 4).max(20));
     let inner = width.saturating_sub(4);
     let before: String = buffer.chars().take(query.start).collect();
     let indent = before.width().min(cols.saturating_sub(width + 1));
@@ -111,19 +165,9 @@ pub fn layout(
         ));
     }
     for (i, c) in candidates.iter().enumerate().skip(first).take(count) {
-        let icon = if config.menu.icons == "none" {
-            ""
-        } else {
-            match c.kind {
-                Kind::Directory => "/ ",
-                Kind::Branch => "⎇ ",
-                Kind::History => "↺ ",
-                Kind::Command => "› ",
-                _ => "  ",
-            }
-        };
+        let icon = icon(c.kind, config);
         let display = clean(&c.display);
-        let desc = clean(&c.description);
+        let desc = description(c);
         let label = if config.menu.show_descriptions && !desc.is_empty() {
             format!("{icon}{display}  {desc}")
         } else {
@@ -249,6 +293,41 @@ mod tests {
             }
             for r in f.rows {
                 assert!(r.end <= f.postdisplay.chars().count());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod ui_tests {
+    use super::*;
+    #[test]
+    fn compact_emoji_rows_keep_width_and_highlights() {
+        for kind in [
+            Kind::Command,
+            Kind::Alias,
+            Kind::Function,
+            Kind::Builtin,
+            Kind::Directory,
+        ] {
+            let mut c = Candidate::history("checkout".into(), 0.);
+            c.kind = kind;
+            c.display = "checkout".into();
+            c.description = String::new();
+            let q = Query::parse("ch", 2);
+            let cfg = Config::default();
+            let frame = layout(1, "ch", &q, &Context::default(), &[c], 0, "", 100, &cfg);
+            assert!(frame.postdisplay.contains(icon(kind, &cfg)));
+            assert!(frame.postdisplay.contains(kind.label()));
+            for line in frame.postdisplay.lines() {
+                assert!(line.width() <= 48);
+            }
+            assert!(frame.postdisplay.lines().map(|s| s.width()).max().unwrap() < 48);
+            for span in &frame.highlights {
+                let words: Vec<_> = span.split_whitespace().collect();
+                let start = words[0].parse::<usize>().unwrap();
+                let end = words[1].parse::<usize>().unwrap();
+                assert!(start <= end && end <= frame.postdisplay.chars().count());
             }
         }
     }
