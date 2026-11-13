@@ -101,7 +101,7 @@ bindkey '^X^X' _ui_snapshot
         send('cd ', .8)
         state=snapshot()
         assert state[2]=='1' and 'Alpha Space' in state[3], ('cd after worker timeout without Enter', state)
-        for prefix, emoji, label in [('uial','🔗','alias'),('uifu','🧩','function'),('pri','🐚','builtin'),('zs','⚙️','binary')]:
+        for prefix, emoji, label in [('uial','🔗','alias'),('uifu','🧩','function'),('pri','🐚','builtin'),('zs','📦','binary')]:
             reset()
             send(prefix, .6)
             state=snapshot()

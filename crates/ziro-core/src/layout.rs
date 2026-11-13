@@ -59,8 +59,8 @@ fn icon(kind: Kind, config: &Config) -> &'static str {
         match kind {
             Kind::Directory if config.menu.icons == "emoji" => "📁 ",
             Kind::File if config.menu.icons == "emoji" => "📄 ",
-            Kind::Command if config.menu.icons == "emoji" => "⚙️ ",
-            Kind::Subcommand if config.menu.icons == "emoji" => "↪️ ",
+            Kind::Command if config.menu.icons == "emoji" => "📦 ",
+            Kind::Subcommand if config.menu.icons == "emoji" => "🔹 ",
             Kind::Alias if config.menu.icons == "emoji" => "🔗 ",
             Kind::Function if config.menu.icons == "emoji" => "🧩 ",
             Kind::Builtin if config.menu.icons == "emoji" => "🐚 ",

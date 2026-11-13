@@ -106,25 +106,31 @@ pub fn rank(
         let mut groups: HashMap<&str, usize> = HashMap::new();
         let mut results = vec![];
         for candidate in candidates {
-            let next = groups.len();
-            let group = *groups.entry(&candidate.group).or_insert(next);
-            let mut c = candidate.clone();
             let composed;
-            let searchable = if c.prefix.is_empty() {
-                c.word.as_str()
+            let searchable = if candidate.prefix.is_empty() {
+                candidate.word.as_str()
             } else {
-                composed = format!("{}{}", c.prefix, c.word);
+                composed = format!("{}{}", candidate.prefix, candidate.word);
                 &composed
             };
-            let hay = Utf32Str::new(searchable, &mut buf);
             let score = if query.word.is_empty() {
                 Some(0)
             } else {
-                pattern.score(hay, &mut matcher)
+                pattern.score(Utf32Str::new(searchable, &mut buf), &mut matcher)
             };
+            // Clone only survivors: most of a large candidate list is
+            // filtered out by the fuzzy pattern.
             if let Some(score) = score {
+                let next = groups.len();
+                let group = *groups.entry(&candidate.group).or_insert(next);
+                let mut c = candidate.clone();
+                let exact = !query.word.is_empty()
+                    && (searchable == query.word
+                        || searchable.strip_suffix('/') == Some(query.word.as_str()));
                 c.score = f64::from(score)
-                    + if searchable.starts_with(&query.word) {
+                    + if exact {
+                        20000.
+                    } else if searchable.starts_with(&query.word) {
                         10000.
                     } else {
                         0.
@@ -135,7 +141,14 @@ pub fn rank(
             }
         }
         results.sort_by(|(ga, a), (gb, b)| ga.cmp(gb).then_with(|| b.score.total_cmp(&a.score)));
-        let mut ranked: Vec<_> = results.into_iter().map(|(_, c)| c).collect();
+        // compsys can offer one insertion from several groups (e.g. the
+        // `echo` builtin and /usr/bin/echo). Keep the first, best-ranked one.
+        let mut seen = std::collections::HashSet::new();
+        let mut ranked: Vec<_> = results
+            .into_iter()
+            .map(|(_, c)| c)
+            .filter(|c| seen.insert((c.prefix.clone(), c.word.clone(), c.suffix.clone())))
+            .collect();
         ranked.extend(
             history
                 .iter()
@@ -232,6 +245,28 @@ mod tests {
         let out = rank(&[a, b, c], &q, &[], &HashMap::new());
         assert!(out[0].word.starts_with("ch"));
         assert_eq!(out.last().unwrap().word, "catch");
+    }
+    #[test]
+    fn same_insertion_from_two_groups_is_shown_once() {
+        let mut builtin = Candidate::history("echo".into(), 0.);
+        builtin.group = "builtin".into();
+        builtin.kind = Kind::Builtin;
+        let mut binary = builtin.clone();
+        binary.group = "command".into();
+        binary.kind = Kind::Command;
+        let out = rank(&[builtin, binary], &Query::parse("ec", 2), &[], &HashMap::new());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].kind, Kind::Builtin);
+    }
+    #[test]
+    fn exact_match_comes_first() {
+        let words = ["gsf", "gsx", "gs", "gsettings"];
+        let candidates: Vec<_> = words
+            .iter()
+            .map(|w| Candidate::history((*w).into(), 0.))
+            .collect();
+        let out = rank(&candidates, &Query::parse("gs", 2), &[], &HashMap::new());
+        assert_eq!(out[0].word, "gs");
     }
     #[test]
     fn ghost_requires_end() {

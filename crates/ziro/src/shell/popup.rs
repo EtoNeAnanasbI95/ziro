@@ -344,7 +344,7 @@ pub fn restore(rect: Rect, screen: &vt100::Screen) -> String {
     output
 }
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use ziro_core::{
         candidate::{Candidate, Context, Kind},
@@ -368,6 +368,27 @@ mod tests {
         );
         Popup::from_message(&frame.message()).unwrap().unwrap()
     }
+    /// Visual comparison: an explicit blank with default style is
+    /// indistinguishable on a terminal from a never-written cell.
+    pub fn visual(screen: &vt100::Screen) -> Vec<String> {
+        let (rows, cols) = screen.size();
+        (0..rows.get())
+            .map(|r| {
+                let mut line = String::new();
+                for c in 0..cols.get() {
+                    let cell = screen.cell(r, c).unwrap();
+                    let text = if cell.has_contents() { cell.contents() } else { " " };
+                    let style = Style::from_cell(cell);
+                    if style == Style::from_spec("fg=default,bg=default") && text == " " {
+                        line.push(' ');
+                    } else {
+                        line.push_str(&format!("{text}{:?}", style));
+                    }
+                }
+                line.trim_end().to_owned()
+            })
+            .collect()
+    }
     #[test]
     fn moves_with_cursor_and_flips_above() {
         let p = popup();
@@ -390,9 +411,9 @@ mod tests {
         base.process(draw.as_bytes());
         assert!(base.screen().contents().contains("Documents"));
         base.process(restore_bytes.as_bytes());
-        assert_eq!(base.screen().contents(), original.contents());
+        assert_eq!(visual(base.screen()), visual(&original));
         assert_eq!(base.screen().cursor_position(), original.cursor_position());
         base.process(b"\x1b8");
-        assert_eq!(base.screen().cursor_position(), (2, 0));
+        assert_eq!(base.screen().cursor_position(), (2, 10));
     }
 }

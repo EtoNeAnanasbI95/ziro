@@ -62,7 +62,7 @@ impl Terminal {
         };
         for sig in [libc::SIGWINCH, libc::SIGTERM, libc::SIGHUP] {
             let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
-            action.sa_sigaction = signal as usize;
+            action.sa_sigaction = signal as extern "C" fn(libc::c_int) as *const () as usize;
             unsafe { libc::sigemptyset(&mut action.sa_mask) };
             let mut old = unsafe { std::mem::zeroed() };
             if unsafe { libc::sigaction(sig, &action, &mut old) } < 0 {

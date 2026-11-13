@@ -107,6 +107,9 @@ pub fn run(no_rc: bool, login: bool) -> Result<i32, Box<dyn std::error::Error>> 
         });
     }
     let mut child = ShellChild(command.spawn()?);
+    // Command keeps its Stdio copies of the slave alive; without dropping
+    // them the master never reports EOF/EIO after the shell exits.
+    drop(command);
     tty.child(child.0.id());
     drop(slave);
     drop(child_renderer);
@@ -120,6 +123,7 @@ pub fn run(no_rc: bool, login: bool) -> Result<i32, Box<dyn std::error::Error>> 
     let mut stdout = io::stdout().lock();
     let mut eof = false;
     let mut status = None;
+    let mut exited_at: Option<Instant> = None;
     while !terminal::STOP.load(Ordering::Relaxed) {
         if terminal::RESIZED.swap(false, Ordering::Relaxed) {
             let next = terminal::size()?;
@@ -272,13 +276,15 @@ pub fn run(no_rc: bool, login: bool) -> Result<i32, Box<dyn std::error::Error>> 
         }
         stdout.write_all(&display.flush())?;
         stdout.flush()?;
-        if let Some(exit) = child.0.try_wait()? {
+        if status.is_none()
+            && let Some(exit) = child.0.try_wait()?
+        {
             status = Some(exit);
-            if eof {
-                break;
-            }
+            exited_at = Some(Instant::now());
         }
-        if eof {
+        // A background job may still hold the PTY open after the shell
+        // exits. Drain its last output briefly, then leave like a terminal.
+        if eof || exited_at.is_some_and(|t| t.elapsed() > Duration::from_millis(100)) {
             break;
         }
     }

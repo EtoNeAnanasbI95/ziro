@@ -7,6 +7,27 @@ use std::{
 pub struct Startup {
     pub directory: PathBuf,
     pub user_directory: PathBuf,
+    had_zdotdir: bool,
+}
+/// $ZIRO_PLUGIN, then a plugin next to an installed binary
+/// (`<prefix>/bin/ziro` → `<prefix>/share/ziro/plugin`), then the source tree.
+fn plugin_path() -> io::Result<PathBuf> {
+    let mut candidates = vec![];
+    if let Some(p) = std::env::var_os("ZIRO_PLUGIN") {
+        candidates.push(PathBuf::from(p));
+    }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(bin) = exe.parent()
+    {
+        candidates.push(bin.join("../share/ziro/plugin/ziro.plugin.zsh"));
+        // target/{debug,release}/ziro inside the repository.
+        candidates.push(bin.join("../../plugin/ziro.plugin.zsh"));
+    }
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugin/ziro.plugin.zsh"));
+    candidates
+        .into_iter()
+        .find_map(|p| p.canonicalize().ok().filter(|p| p.is_file()))
+        .ok_or_else(|| io::Error::other("ziro.plugin.zsh not found; set ZIRO_PLUGIN"))
 }
 fn quote(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
@@ -28,12 +49,11 @@ impl Startup {
         } else {
             std::env::current_dir()?.join(base)
         };
-        let plugin = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../plugin/ziro.plugin.zsh")
-            .canonicalize()?;
+        let plugin = plugin_path()?;
         let mut startup = Self {
             directory,
             user_directory,
+            had_zdotdir: std::env::var_os("ZDOTDIR").is_some(),
         };
         if let Err(e) = startup.write(no_rc, &plugin) {
             let _ = fs::remove_dir_all(&startup.directory);
@@ -69,13 +89,19 @@ impl Startup {
         fs::write(
             self.directory.join(".zshrc"),
             format!(
-                "ZDOTDIR=$ZIRO_USER_ZDOTDIR\n{}\n(( $+functions[_ziro_precmd] )) || builtin source {}\n",
+                "ZDOTDIR=$ZIRO_USER_ZDOTDIR\n{}\n(( $+functions[_ziro_precmd] )) || builtin source {}\n{}unset ZIRO_USER_ZDOTDIR\n",
                 if no_rc {
                     ""
                 } else {
                     "[[ -r $ZDOTDIR/.zshrc ]] && builtin source \"$ZDOTDIR/.zshrc\""
                 },
-                quote(plugin)
+                quote(plugin),
+                // Do not leak ZDOTDIR=$HOME to children when it was unset.
+                if self.had_zdotdir {
+                    ""
+                } else {
+                    "[[ $ZDOTDIR == \"$HOME\" ]] && unset ZDOTDIR\n"
+                }
             ),
         )?;
         Ok(())

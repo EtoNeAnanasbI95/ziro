@@ -105,11 +105,19 @@ _ziro_worker_main() {
   typeset -ga precmd_functions=() preexec_functions=() zshexit_functions=()
   unfunction zshexit 2>/dev/null
   if [[ -n ${_ziro_ui_fd:-} ]]; then exec {_ziro_ui_fd}>&-; _ziro_ui_fd=''; fi
-  if [[ -n ${_ziro_fd:-} ]]; then
-    zle -F $_ziro_fd 2>/dev/null
-    exec {_ziro_fd}>&-
-    _ziro_fd=''
-  fi
+  # The fork inherits every fd handler of the editor (oh-my-zsh async git
+  # prompt, other plugins). Left installed, the worker would read the same
+  # pipes and steal bytes from the parent's handlers, corrupting the prompt.
+  local _ziro_line _ziro_hfd
+  local -a _ziro_words
+  for _ziro_line in "${(@f)$(zle -F -L 2>/dev/null)}"; do
+    _ziro_words=(${(z)_ziro_line})
+    _ziro_hfd=${_ziro_words[(r)<->]}
+    [[ -n $_ziro_hfd ]] || continue
+    zle -F $_ziro_hfd 2>/dev/null
+    exec {_ziro_hfd}<&- 2>/dev/null
+  done
+  if [[ -n ${_ziro_fd:-} ]]; then exec {_ziro_fd}>&- 2>/dev/null; _ziro_fd=''; fi
   zle -N zle-line-pre-redraw _ziro_worker_noop
   zle -N zle-line-finish _ziro_worker_noop
   zle -N zle-keymap-select _ziro_worker_noop

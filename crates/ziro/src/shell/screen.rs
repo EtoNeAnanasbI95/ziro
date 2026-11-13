@@ -127,6 +127,7 @@ pub struct Compositor {
     sync_supported: bool,
     child_sync: bool,
     partial_forwarded: bool,
+    held_since: Option<std::time::Instant>,
 }
 impl Compositor {
     pub fn new(rows: u16, cols: u16, origin: (u16, u16), sync_supported: bool) -> Self {
@@ -146,6 +147,7 @@ impl Compositor {
             sync_supported,
             child_sync: false,
             partial_forwarded: false,
+            held_since: None,
         }
     }
     fn feed(&mut self, bytes: &[u8]) {
@@ -208,12 +210,19 @@ impl Compositor {
         );
         self.known_from =
             (self.known_from + rows.saturating_sub(old_rows)).min(rows.saturating_sub(1));
-        self.ui.popup = None;
+        // Keep the popup: the next flush places it for the new geometry, and
+        // any redraw from zsh repaints it on top.
         output.into_bytes()
     }
     pub fn flush(&mut self) -> Vec<u8> {
         if !self.boundary.ready() {
-            if self.pending.len() <= 1024 * 1024 {
+            // Hold a split sequence only while a popup must be repainted
+            // after it, and never long enough to be visible.
+            let held = *self.held_since.get_or_insert_with(std::time::Instant::now);
+            if self.paint.is_some()
+                && self.pending.len() <= 1024 * 1024
+                && held.elapsed() < std::time::Duration::from_millis(30)
+            {
                 return vec![];
             }
             let mut out = self
@@ -225,6 +234,7 @@ impl Compositor {
             self.partial_forwarded = true;
             return out;
         }
+        self.held_since = None;
         let screen = self.parser.screen();
         let (rows, cols) = screen.size();
         let (rows, cols) = (rows.get(), cols.get());
@@ -336,6 +346,7 @@ mod tests {
     fn cannot_interleave_controls_or_utf8() {
         let mut c = Compositor::new(20, 80, (0, 0), true);
         show(&mut c);
+        assert!(!c.flush().is_empty());
         c.push_child(b"\x1b[");
         assert!(c.flush().is_empty());
         c.push_child(b"31m");
@@ -344,6 +355,17 @@ mod tests {
         assert!(c.flush().is_empty());
         c.push_child(&[0xae]);
         assert!(!c.flush().is_empty());
+        // A stalled sequence is released after a short hold.
+        c.push_child(b"\x1b[");
+        assert!(c.flush().is_empty());
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        assert!(c.flush().ends_with(b"\x1b["));
+    }
+    #[test]
+    fn partial_output_without_popup_is_not_delayed() {
+        let mut c = Compositor::new(20, 80, (0, 0), true);
+        c.push_child(b"abc\x1b[");
+        assert_eq!(c.flush(), b"abc\x1b[");
     }
     #[test]
     fn restores_overlay_and_never_takes_over_alternate_screen() {
@@ -356,7 +378,10 @@ mod tests {
         assert!(actual.screen().contents().contains("Documents"));
         assert!(c.flush().is_empty());
         actual.process(&c.close());
-        assert_eq!(actual.screen().contents(), c.parser.screen().contents());
+        assert_eq!(
+            crate::shell::popup::tests::visual(actual.screen()),
+            crate::shell::popup::tests::visual(c.parser.screen())
+        );
         c.push_child(b"\x1b[?1049h\x1b[2Jvim");
         show(&mut c);
         let raw = c.flush();
