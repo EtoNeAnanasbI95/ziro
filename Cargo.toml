@@ -1,0 +1,15 @@
+[workspace]
+members = ["crates/ziro-proto", "crates/ziro-core", "crates/ziro"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+ziro-proto = { path = "crates/ziro-proto" }
+ziro-core = { path = "crates/ziro-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "net", "io-util", "time", "sync", "macros", "signal"] }

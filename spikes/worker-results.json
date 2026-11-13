@@ -1,0 +1,223 @@
+[
+  {
+    "query": "git ch",
+    "candidates": 8,
+    "ms": 190.588,
+    "context": [
+      "CANDS",
+      "1",
+      "ch",
+      "",
+      "",
+      "",
+      "",
+      "8"
+    ],
+    "examples": [
+      [
+        "C",
+        "-default-",
+        "main-porcelain-commands",
+        "checkout",
+        "checkout         -- checkout branch or paths to working tree",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "C",
+        "-default-",
+        "main-porcelain-commands",
+        "cherry-pick",
+        "cherry-pick      -- apply changes introduced by some existing commits",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "C",
+        "-default-",
+        "plumbing-manipulator-commands",
+        "checkout-index",
+        "checkout-index   -- copy files from index to working directory",
+        "",
+        "",
+        "",
+        ""
+      ]
+    ]
+  },
+  {
+    "query": "git checkout ",
+    "candidates": 5,
+    "ms": 155.726,
+    "context": [
+      "CANDS",
+      "2",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "5"
+    ],
+    "examples": [
+      [
+        "C",
+        "-default-",
+        "heads-local",
+        "feat/ziro-mvp",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "C",
+        "-default-",
+        "heads-local",
+        "HEAD",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "C",
+        "-default-",
+        "commits",
+        "eb69ccd",
+        "eb69ccd  -- [HEAD]    docs: record ziro MVP design and implementation plan (",
+        "",
+        "",
+        "",
+        ""
+      ]
+    ]
+  },
+  {
+    "query": "tar -",
+    "candidates": 7,
+    "ms": 18.444,
+    "context": [
+      "CANDS",
+      "3",
+      "",
+      "",
+      "-",
+      "",
+      "",
+      "7"
+    ],
+    "examples": [
+      [
+        "C",
+        "-default-",
+        "values",
+        "A",
+        "A  -- append to an archive",
+        "",
+        "q",
+        "",
+        ""
+      ],
+      [
+        "C",
+        "-default-",
+        "values",
+        "c",
+        "c  -- create a new archive",
+        "",
+        "q",
+        "",
+        ""
+      ],
+      [
+        "C",
+        "-default-",
+        "values",
+        "t",
+        "t  -- list archive contents",
+        "",
+        "q",
+        "",
+        ""
+      ]
+    ]
+  },
+  {
+    "query": "ls ~/De",
+    "candidates": 1,
+    "ms": 24.624,
+    "context": [
+      "CANDS",
+      "4",
+      "~/De",
+      "",
+      "",
+      "",
+      "",
+      "1"
+    ],
+    "examples": [
+      [
+        "C",
+        "-default-",
+        "globbed-files",
+        "Desktop",
+        "",
+        "",
+        "f",
+        "~/",
+        ""
+      ]
+    ]
+  },
+  {
+    "query": "ziro-test ",
+    "candidates": 2,
+    "ms": 2.864,
+    "context": [
+      "CANDS",
+      "5",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "2"
+    ],
+    "examples": [
+      [
+        "C",
+        "",
+        "",
+        "alpha",
+        "alpha -- inherited alpha",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "C",
+        "",
+        "",
+        "beta",
+        "beta -- inherited beta",
+        "",
+        "",
+        "",
+        ""
+      ]
+    ]
+  },
+  {
+    "stress_requests": 2000,
+    "seconds": 7.069
+  }
+]

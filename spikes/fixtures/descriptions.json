@@ -1,0 +1,20 @@
+{
+  "git ch": [
+    "checkout         -- checkout branch or paths to working tree",
+    "cherry-pick      -- apply changes introduced by some existing commits",
+    "checkout-index   -- copy files from index to working directory"
+  ],
+  "git checkout ": [
+    "eb69ccd  -- [HEAD]    docs: record ziro MVP design and implementation plan ("
+  ],
+  "tar -": [
+    "A  -- append to an archive",
+    "c  -- create a new archive",
+    "t  -- list archive contents"
+  ],
+  "ls ~/De": [],
+  "ziro-test ": [
+    "alpha -- inherited alpha",
+    "beta -- inherited beta"
+  ]
+}
