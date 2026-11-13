@@ -33,6 +33,7 @@ struct Session {
     cols: usize,
     keymap: String,
     cwd: String,
+    worker_cwd: String,
     flags: String,
     cache_key: String,
     context: Context,
@@ -236,6 +237,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                     session_id = m.field(0).into();
                     worker = true;
                     if let Some(s) = st.sessions.get_mut(&session_id) {
+                        s.worker_cwd = m.field(1).into();
                         s.worker = Some(tx.clone());
                         if s.pending {
                             request(s);
@@ -284,6 +286,18 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                             s.cols = m.number::<usize>(2).unwrap_or(80).clamp(5, 1000);
                             s.keymap = m.field(4).into();
                             s.cwd = m.field(5).into();
+                            if s.worker.is_some() && s.worker_cwd != s.cwd {
+                                s.worker = None;
+                                s.busy = None;
+                                s.pending = true;
+                                send(
+                                    &s.shell,
+                                    Message::new(
+                                        "ERR",
+                                        ["worker_cwd", "recreate worker in current directory"],
+                                    ),
+                                );
+                            }
                             s.flags = m.field(6).into();
                             s.buffer = m.field(7).into();
                             s.selected = 0;

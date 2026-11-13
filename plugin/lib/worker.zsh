@@ -61,7 +61,11 @@ _ziro_capture() {
 _ziro_worker_read() {
   local _ziro_chunk _ziro_record
   sysread -i $_ziro_worker_fd -s 65536 -t 0 _ziro_chunk || { [[ $? == 5 ]] && { zle -F $_ziro_worker_fd; zle .accept-line; }; return; }
-  _ziro_worker_tail+=$_ziro_chunk
+  _ziro_worker_process_chunk "$_ziro_chunk"
+}
+_ziro_worker_process_chunk() {
+  local _ziro_record
+  _ziro_worker_tail+=$1
   while [[ $_ziro_worker_tail == *$'\0'* ]]; do
     _ziro_record=${_ziro_worker_tail%%$'\0'*}
     _ziro_worker_tail=${_ziro_worker_tail#*$'\0'}
@@ -103,7 +107,17 @@ _ziro_worker_main() {
   bindkey -e
   bindkey '^]' _ziro_worker_trigger
   zle -N zle-line-init _ziro_worker_init
-  vared _ziro_empty
+  if zle; then
+    # A restart from an fd callback inherits an active editor. Completion
+    # widgets can use that editor directly; nested vared is forbidden.
+    _ziro_worker_init
+    local _ziro_chunk
+    while sysread -i $_ziro_worker_fd -s 65536 _ziro_chunk; do
+      _ziro_worker_process_chunk "$_ziro_chunk"
+    done
+  else
+    vared _ziro_empty
+  fi
   exec {_ziro_worker_fd}>&-
 }
 _ziro_worker_noop() { :; }

@@ -94,6 +94,10 @@ python3 tests/daemon_smoke.py
 python3 tests/shell_smoke.py
 ZIRO_TEST_OMZ=1 python3 tests/shell_smoke.py
 ZIRO_TEST_TMUX=1 python3 tests/shell_smoke.py
+ZIRO_TEST_VI=1 python3 tests/shell_smoke.py
+ZIRO_TEST_EXPLICIT=1 python3 tests/shell_smoke.py
+ZIRO_TEST_RESTART=1 python3 tests/shell_smoke.py
+ZIRO_TEST_LIFECYCLE=1 python3 tests/shell_smoke.py
 ZIRO_STRESS=1 python3 tests/worker_probe.py
 cargo run --release -p ziro-core --example rank_bench
 ```

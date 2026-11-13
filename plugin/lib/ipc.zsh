@@ -27,6 +27,11 @@ _ziro_connect() {
   "$_ziro_binary" socket-nonblock <&$_ziro_fd 2>/dev/null || { _ziro_disconnect; return 1; }
   _ziro_send HELLO v1 "$_ziro_session" $$ "${TTY:-}" "${TERM:-}" "$ZSH_VERSION"
 }
+_ziro_read_event() {
+  # A socket event must not become LASTWIDGET: prefix-history widgets use
+  # it to distinguish repeated arrows from a new search.
+  zle _ziro_read -f nolast -w -- "$@"
+}
 _ziro_read() {
   [[ $2 == (hup|err|nval) ]] && { _ziro_disconnect; return; }
   local chunk record
@@ -37,11 +42,12 @@ _ziro_read() {
     record=${_ziro_tail%%$'\0'*}; _ziro_tail=${_ziro_tail#*$'\0'}
     local -a f=("${(@ps:\x1f:)record}")
     case $f[1] in
-      CFG) _ziro_arrows=$f[2] _ziro_enter_accepts=$f[3]; _ziro_bind_all "${f[@]:4}" ;;
+      CFG) _ziro_arrows=$f[2] _ziro_enter_accepts=$f[3]; _ziro_cfg_keys=("${f[@]:4}") ;;
       FRAME) (( _ziro_inflight > 0 )) && (( _ziro_inflight-- )); [[ $f[2] == $_ziro_gen && $_ziro_hidden != "$BUFFER" ]] && _ziro_frame "${f[@]}" ;;
       CLEAR) (( _ziro_inflight > 0 )) && (( _ziro_inflight-- )); [[ $f[2] == $_ziro_gen ]] && _ziro_clear ;;
-      ERR) _ziro_clear; [[ $f[2] == worker_timeout ]] && _ziro_worker_stop ;;
+      ERR) _ziro_clear; [[ $f[2] == worker_timeout ]] && _ziro_worker_stop; [[ $f[2] == worker_cwd ]] && _ziro_worker_start ;;
     esac
   done
-  zle -R
+  zle && zle -R
+  return 0
 }

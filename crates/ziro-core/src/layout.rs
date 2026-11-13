@@ -150,7 +150,12 @@ pub fn layout(
                 config.theme.description
             ));
         }
-        for &index in &c.matches {
+        let needle = query
+            .word
+            .strip_prefix(&context.iprefix)
+            .unwrap_or(&query.word);
+        let positions = crate::rank::match_positions(&c.word, &c.prefix, needle);
+        for &index in &positions {
             let offset = icon.chars().count() + index as usize;
             if offset < label_len {
                 f.highlights.push(format!(

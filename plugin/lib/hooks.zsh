@@ -8,25 +8,30 @@ _ziro_precmd() {
     fi
   fi
   if [[ -n $_ziro_fd ]]; then
+    if (( !_ziro_bound )); then
+      # Initialization may wait here, before ZLE owns the keyboard.
+      zselect -t 20 -r $_ziro_fd 2>/dev/null && _ziro_read
+      (( $#_ziro_cfg_keys )) && _ziro_bind_all "${_ziro_cfg_keys[@]}"
+    fi
     (( _ziro_gen++ ))
     _ziro_send CTX $_ziro_gen 0 ${COLUMNS:-80} ${LINES:-24} main "$PWD" '' ''
     _ziro_worker_start
   fi
-  _ziro_previous_buffer='' _ziro_previous_cursor=-1 _ziro_hidden='' _ziro_navigated=0 _ziro_explicit=0
-  _ziro_compat
+  _ziro_previous_buffer='' _ziro_previous_cursor=-1 _ziro_hidden='' _ziro_navigated=0 _ziro_explicit=0 _ziro_history_nav=0
 }
 _ziro_redraw() {
   local begin=$EPOCHREALTIME
-  [[ -n $_ziro_fd ]] || return
-  zle -N _ziro_read
-  zle -F -w $_ziro_fd _ziro_read
+  [[ -n $_ziro_fd && $_ziro_bound == 1 ]] || return
+  zle -F $_ziro_fd _ziro_read_event
   [[ -n $_ziro_pty_fd ]] && zle -F $_ziro_pty_fd _ziro_worker_drain
-  if [[ $_ziro_previous_buffer == "$BUFFER" && $_ziro_previous_cursor == $CURSOR ]]; then _ziro_paint; return; fi
-  [[ $_ziro_worker_cwd == "$PWD" ]] || { _ziro_clear; return; }
+  if [[ $_ziro_previous_buffer == "$BUFFER" && $_ziro_previous_cursor == $CURSOR && $_ziro_worker_cwd == "$PWD" ]]; then _ziro_paint; return; fi
   _ziro_clear
   [[ $_ziro_hidden == "$BUFFER" ]] && return
   _ziro_hidden=''
   local flags=''
+  if (( _ziro_history_nav )); then
+    if [[ $_ziro_history_buffer == "$BUFFER" ]]; then flags+=h; else _ziro_history_nav=0; fi
+  fi
   [[ $LASTWIDGET == *history* || $LASTWIDGET == *line-or-beginning-search* ]] && flags+=h
   (( _ziro_explicit )) && flags+=x
   (( _ziro_inflight < 32 )) || return

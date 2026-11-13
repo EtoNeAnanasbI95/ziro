@@ -11,6 +11,7 @@ fn escape(word: &str, quote: Option<char>) -> String {
     let mut out = String::new();
     for c in word.chars() {
         match quote {
+            None if c == '\n' => out.push_str("$'\\n'"),
             Some('\'') if c == '\'' => out.push_str("'\\''"),
             Some('"') if matches!(c, '"' | '\\' | '$' | '`') => {
                 out.push('\\');
@@ -97,5 +98,28 @@ mod tests {
             insert("cat old.txt suffix", 6, "new", Kind::File).buffer,
             "cat new  suffix"
         );
+    }
+}
+
+#[cfg(test)]
+mod literal_tests {
+    #[test]
+    fn newlines_are_not_shell_continuations() {
+        for word in [
+            "a\nb",
+            "файл с пробелом'1",
+            "a\tb",
+            "$(echo unsafe)",
+            "a\\b",
+        ] {
+            let quoted = super::escape(word, None);
+            let output = std::process::Command::new("zsh")
+                .arg("-fc")
+                .arg(format!("print -rn -- {quoted}"))
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            assert_eq!(output.stdout, word.as_bytes());
+        }
     }
 }

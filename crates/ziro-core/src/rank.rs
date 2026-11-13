@@ -93,53 +93,89 @@ pub fn rank(
         Config as MatchConfig, Matcher, Utf32Str,
         pattern::{AtomKind, CaseMatching, Normalization, Pattern},
     };
-    let mut matcher = Matcher::new(MatchConfig::DEFAULT);
-    let mut buf = vec![];
-    let pattern = Pattern::new(
-        &query.word,
-        CaseMatching::Smart,
-        Normalization::Smart,
-        AtomKind::Fuzzy,
-    );
-    let mut groups: HashMap<&str, usize> = HashMap::new();
-    let mut results = vec![];
-    for candidate in candidates {
-        let next = groups.len();
-        let group = *groups.entry(&candidate.group).or_insert(next);
-        let mut c = candidate.clone();
-        let searchable = format!("{}{}", c.prefix, c.word);
-        let hay = Utf32Str::new(&searchable, &mut buf);
-        let mut indices = vec![];
-        let score = if query.word.is_empty() {
-            Some(0)
-        } else {
-            pattern.indices(hay, &mut matcher, &mut indices)
-        };
-        if let Some(score) = score {
-            c.score = f64::from(score)
-                + if searchable.starts_with(&query.word) {
-                    10000.
-                } else {
-                    0.
-                }
-                + usage.get(&c.word).copied().unwrap_or(0.) * 100.;
-            let prefix_len = c.prefix.chars().count() as u32;
-            c.matches = indices
-                .into_iter()
-                .filter_map(|i| i.checked_sub(prefix_len))
-                .collect();
-            results.push((group, c));
+    thread_local! {static MATCHER:std::cell::RefCell<Matcher>=std::cell::RefCell::new(Matcher::new(MatchConfig::DEFAULT));}
+    MATCHER.with(|cell| {
+        let mut matcher = cell.borrow_mut();
+        let mut buf = vec![];
+        let pattern = Pattern::new(
+            &query.word,
+            CaseMatching::Smart,
+            Normalization::Smart,
+            AtomKind::Fuzzy,
+        );
+        let mut groups: HashMap<&str, usize> = HashMap::new();
+        let mut results = vec![];
+        for candidate in candidates {
+            let next = groups.len();
+            let group = *groups.entry(&candidate.group).or_insert(next);
+            let mut c = candidate.clone();
+            let composed;
+            let searchable = if c.prefix.is_empty() {
+                c.word.as_str()
+            } else {
+                composed = format!("{}{}", c.prefix, c.word);
+                &composed
+            };
+            let hay = Utf32Str::new(searchable, &mut buf);
+            let score = if query.word.is_empty() {
+                Some(0)
+            } else {
+                pattern.score(hay, &mut matcher)
+            };
+            if let Some(score) = score {
+                c.score = f64::from(score)
+                    + if searchable.starts_with(&query.word) {
+                        10000.
+                    } else {
+                        0.
+                    }
+                    + usage.get(&c.word).copied().unwrap_or(0.) * 100.;
+                c.matches.clear();
+                results.push((group, c));
+            }
         }
+        results.sort_by(|(ga, a), (gb, b)| ga.cmp(gb).then_with(|| b.score.total_cmp(&a.score)));
+        let mut ranked: Vec<_> = results.into_iter().map(|(_, c)| c).collect();
+        ranked.extend(
+            history
+                .iter()
+                .take(2)
+                .map(|e| Candidate::history(e.command.clone(), e.score)),
+        );
+        ranked
+    })
+}
+pub fn match_positions(word: &str, prefix: &str, needle: &str) -> Vec<u32> {
+    use nucleo_matcher::{
+        Config, Matcher, Utf32Str,
+        pattern::{AtomKind, CaseMatching, Normalization, Pattern},
+    };
+    thread_local! {static MATCHER:std::cell::RefCell<Matcher>=std::cell::RefCell::new(Matcher::new(Config::DEFAULT));}
+    if needle.is_empty() {
+        return vec![];
     }
-    results.sort_by(|(ga, a), (gb, b)| ga.cmp(gb).then_with(|| b.score.total_cmp(&a.score)));
-    let mut ranked: Vec<_> = results.into_iter().map(|(_, c)| c).collect();
-    ranked.extend(
-        history
-            .iter()
-            .take(2)
-            .map(|e| Candidate::history(e.command.clone(), e.score)),
-    );
-    ranked
+    MATCHER.with(|cell| {
+        let mut matcher = cell.borrow_mut();
+        let mut buf = vec![];
+        let searchable = format!("{prefix}{word}");
+        let mut indices = vec![];
+        Pattern::new(
+            needle,
+            CaseMatching::Smart,
+            Normalization::Smart,
+            AtomKind::Fuzzy,
+        )
+        .indices(
+            Utf32Str::new(&searchable, &mut buf),
+            &mut matcher,
+            &mut indices,
+        );
+        let shift = prefix.chars().count() as u32;
+        indices
+            .into_iter()
+            .filter_map(|i| i.checked_sub(shift))
+            .collect()
+    })
 }
 pub fn ghost<'a>(buffer: &str, cursor: usize, history: &'a [Entry]) -> Option<&'a str> {
     if buffer.is_empty() || cursor != buffer.chars().count() {

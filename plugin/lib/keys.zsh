@@ -1,6 +1,21 @@
 _ziro_fallback() {
   local prior=${_ziro_original[${KEYMAP}:${KEYS}]:-${_ziro_original[main:${KEYS}]:-${_ziro_original[emacs:${KEYS}]}}}
-  [[ -n $prior && $prior != _ziro_* ]] && zle "$prior"
+  if [[ -n $prior && $prior != _ziro_* ]]; then
+    if [[ $prior == *history* || $prior == *line-or-beginning-search* ]]; then
+      if [[ $prior == *line-or-beginning-search* ]]; then
+        if (( _ziro_history_nav )) && [[ $_ziro_history_buffer == "$BUFFER" && ( $LASTWIDGET == _ziro_key_prev || $LASTWIDGET == _ziro_key_next || $LASTWIDGET == *line-or-beginning-search* ) ]]; then
+          CURSOR=$_ziro_history_search_cursor
+        else
+          _ziro_history_search_cursor=$CURSOR
+        fi
+      fi
+      _ziro_history_nav=1
+      zle "$prior" -w
+      _ziro_history_buffer=$BUFFER
+    else
+      zle "$prior" -w
+    fi
+  fi
 }
 _ziro_accept() {
   (( _ziro_visible )) || return 1
@@ -43,10 +58,11 @@ _ziro_dispatch() {
 }
 _ziro_bind() {
   local key=$1 action=$2 map prior widget="_ziro_key_$2"
+  local main_map=${${(z)"$(bindkey -lL main)"}[-2]}
   for map in emacs viins main; do
     prior=${${(z)"$(bindkey -M $map "$key" 2>/dev/null)"}[-1]}
     if [[ $prior == _ziro_* ]]; then
-      _ziro_original[$map:${(g:ce:)key}]=${_ziro_original[emacs:${(g:ce:)key}]:-${_ziro_original[viins:${(g:ce:)key}]}}
+      _ziro_original[$map:${(g:ce:)key}]=${_ziro_original[$main_map:${(g:ce:)key}]}
       continue
     fi
     _ziro_original[$map:${(g:ce:)key}]=$prior
