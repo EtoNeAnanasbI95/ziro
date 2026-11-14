@@ -40,6 +40,41 @@ ziro stats --json
 История и лог: `${XDG_STATE_HOME:-$HOME/.local/state}/ziro/`.
 `HISTFILE` передаётся при автоматическом старте; импорт не дублирует записи.
 
+## Режим `ziro shell` (плавающее меню у курсора)
+
+```sh
+ziro shell            # ваш zsh с вашими rc внутри PTY-обёртки
+ziro shell --no-rc    # без пользовательских rc (для проверки)
+ziro shell --login    # login-оболочка
+```
+
+Обёртка запускает настоящий zsh в PTY, прозрачно пересылает ввод/вывод и
+рисует узкое меню поверх экрана: под курсором, а если снизу мало места — над
+ним; у правого края сдвигается влево. Ячейки под меню восстанавливаются,
+в полноэкранных программах (vim, less) меню не рисуется. Пользовательские
+`.zshenv`/`.zprofile`/`.zshrc`/`.zlogin` и `ZDOTDIR` подхватываются как
+обычно; плагин подключается после `.zshrc` (если вы уже подключаете его в
+`.zshrc`, второй раз он не загрузится). Код выхода, Ctrl+C, Ctrl+Z, resize
+сохраняются; при SIGKILL обёртки отдельный guardian возвращает терминал в
+нормальный режим и завершает оболочку.
+
+Плагин ищется в `$ZIRO_PLUGIN`, затем `<prefix>/share/ziro/plugin/`, затем
+рядом с бинарём в дереве репозитория.
+
+Чтобы открывать его в каждом новом окне kitty, можно указать в
+`kitty.conf`: `shell /path/to/ziro shell` (обычный zsh при этом не меняется).
+
+## Производительность
+
+- Воркер разрешает функции completion через скомпилированные `zcompile`
+  дайджесты (`${XDG_CACHE_HOME:-~/.cache}/ziro/zwc`, собираются в фоне один
+  раз за сессию; `ZIRO_ZWC=0` отключает сборку). fpath самой оболочки не
+  меняется. Холодный `git checkout ` ~320 → ~190 мс на этой машине; остальное
+  время — сама `_git` и запуски git.
+- Повторный контекст (например, снова `git checkout `) сразу показывает прошлый
+  ответ и обновляет его, когда compsys досчитает.
+- История индексируется в памяти: на 100k записей префиксный поиск ~1 мс.
+
 ## Управление
 
 - ↑/↓, Shift+Tab: выбор строки меню; Tab: вставка.
@@ -92,6 +127,9 @@ cargo test
 cargo build
 python3 tests/daemon_smoke.py
 python3 tests/shell_smoke.py
+python3 tests/ui_smoke.py
+python3 tests/overlay_smoke.py      # ziro shell в tmux
+zsh -f tests/frame_state.zsh
 ZIRO_TEST_OMZ=1 python3 tests/shell_smoke.py
 ZIRO_TEST_TMUX=1 python3 tests/shell_smoke.py
 ZIRO_TEST_VI=1 python3 tests/shell_smoke.py
