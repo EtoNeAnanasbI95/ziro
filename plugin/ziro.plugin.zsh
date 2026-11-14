@@ -15,7 +15,7 @@ typeset -gi _ziro_overlay_mode=0
 typeset -g _ziro_arrows=menu _ziro_enter_accepts=explicit
 typeset -ga _ziro_buffers=() _ziro_cursors=() _ziro_row_starts=() _ziro_row_ends=() _ziro_highlights=() _ziro_base_highlights=() _ziro_cfg_keys=()
 typeset -gA _ziro_original=()
-for _ziro_lib in overlay ipc render worker hooks keys compat; do source "$_ziro_root/lib/$_ziro_lib.zsh"; done
+for _ziro_lib in overlay ipc render zwc worker hooks keys compat; do source "$_ziro_root/lib/$_ziro_lib.zsh"; done
 unset _ziro_lib
 _ziro_overlay_init
 _ziro_compat

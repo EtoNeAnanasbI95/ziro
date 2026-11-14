@@ -313,7 +313,7 @@ mod ui_tests {
             let mut c = Candidate::history("checkout".into(), 0.);
             c.kind = kind;
             c.display = "checkout".into();
-            c.description = String::new();
+            c.description = "".into();
             let q = Query::parse("ch", 2);
             let cfg = Config::default();
             let frame = layout(1, "ch", &q, &Context::default(), &[c], 0, "", 100, &cfg);

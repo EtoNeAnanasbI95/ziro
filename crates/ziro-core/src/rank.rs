@@ -83,6 +83,8 @@ impl Query {
         format!("{cwd}\x1e{before}\x1e{dir}")
     }
 }
+/// Upper bound of ranked rows kept for display and navigation.
+pub const MAX_RANKED: usize = 200;
 pub fn rank(
     candidates: &[Candidate],
     query: &Query,
@@ -104,11 +106,13 @@ pub fn rank(
             AtomKind::Fuzzy,
         );
         let mut groups: HashMap<&str, usize> = HashMap::new();
-        let mut results = vec![];
-        for candidate in candidates {
+        // Score into (group, score, index); candidates are cloned only after
+        // ordering, deduplication and truncation.
+        let mut results: Vec<(usize, f64, usize)> = vec![];
+        for (index, candidate) in candidates.iter().enumerate() {
             let composed;
             let searchable = if candidate.prefix.is_empty() {
-                candidate.word.as_str()
+                &*candidate.word
             } else {
                 composed = format!("{}{}", candidate.prefix, candidate.word);
                 &composed
@@ -118,16 +122,13 @@ pub fn rank(
             } else {
                 pattern.score(Utf32Str::new(searchable, &mut buf), &mut matcher)
             };
-            // Clone only survivors: most of a large candidate list is
-            // filtered out by the fuzzy pattern.
             if let Some(score) = score {
                 let next = groups.len();
                 let group = *groups.entry(&candidate.group).or_insert(next);
-                let mut c = candidate.clone();
                 let exact = !query.word.is_empty()
                     && (searchable == query.word
                         || searchable.strip_suffix('/') == Some(query.word.as_str()));
-                c.score = f64::from(score)
+                let score = f64::from(score)
                     + if exact {
                         20000.
                     } else if searchable.starts_with(&query.word) {
@@ -135,19 +136,28 @@ pub fn rank(
                     } else {
                         0.
                     }
-                    + usage.get(&c.word).copied().unwrap_or(0.) * 100.;
-                c.matches.clear();
-                results.push((group, c));
+                    + usage.get(&*candidate.word).copied().unwrap_or(0.) * 100.;
+                results.push((group, score, index));
             }
         }
-        results.sort_by(|(ga, a), (gb, b)| ga.cmp(gb).then_with(|| b.score.total_cmp(&a.score)));
-        // compsys can offer one insertion from several groups (e.g. the
-        // `echo` builtin and /usr/bin/echo). Keep the first, best-ranked one.
+        results.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.total_cmp(&a.1)));
+        // compsys can offer one insertion twice (e.g. the `echo` builtin and
+        // /usr/bin/echo). Keep the first, best-ranked one. The filter is lazy,
+        // so at most MAX_RANKED (+ duplicates) rows are hashed.
         let mut seen = std::collections::HashSet::new();
-        let mut ranked: Vec<_> = results
+        let mut ranked: Vec<Candidate> = results
             .into_iter()
-            .map(|(_, c)| c)
-            .filter(|c| seen.insert((c.prefix.clone(), c.word.clone(), c.suffix.clone())))
+            .filter(|&(_, _, i)| {
+                let c = &candidates[i];
+                seen.insert((&*c.prefix, &*c.word, &*c.suffix))
+            })
+            .take(MAX_RANKED)
+            .map(|(_, score, i)| {
+                let mut c = candidates[i].clone();
+                c.score = score;
+                c.matches.clear();
+                c
+            })
             .collect();
         ranked.extend(
             history
@@ -217,7 +227,7 @@ pub fn should_show(
         && !candidates.is_empty()
         && !(candidates.len() == 1
             && candidates[0].kind != Kind::History
-            && candidates[0].word == query.word)
+            && *candidates[0].word == *query.word)
 }
 #[cfg(test)]
 mod tests {
@@ -244,17 +254,22 @@ mod tests {
         let q = Query::parse("ch", 2);
         let out = rank(&[a, b, c], &q, &[], &HashMap::new());
         assert!(out[0].word.starts_with("ch"));
-        assert_eq!(out.last().unwrap().word, "catch");
+        assert_eq!(&*out.last().unwrap().word, "catch");
     }
     #[test]
-    fn same_insertion_from_two_groups_is_shown_once() {
+    fn same_insertion_is_shown_once() {
         let mut builtin = Candidate::history("echo".into(), 0.);
         builtin.group = "builtin".into();
         builtin.kind = Kind::Builtin;
         let mut binary = builtin.clone();
         binary.group = "command".into();
         binary.kind = Kind::Command;
-        let out = rank(&[builtin, binary], &Query::parse("ec", 2), &[], &HashMap::new());
+        let out = rank(
+            &[builtin, binary],
+            &Query::parse("ec", 2),
+            &[],
+            &HashMap::new(),
+        );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].kind, Kind::Builtin);
     }
@@ -266,7 +281,7 @@ mod tests {
             .map(|w| Candidate::history((*w).into(), 0.))
             .collect();
         let out = rank(&candidates, &Query::parse("gs", 2), &[], &HashMap::new());
-        assert_eq!(out[0].word, "gs");
+        assert_eq!(&*out[0].word, "gs");
     }
     #[test]
     fn ghost_requires_end() {
@@ -291,14 +306,14 @@ mod behavior_tests {
         let candidates = vec![candidate("feature-a"), candidate("feature-b")];
         let q = Query::parse("f", 1);
         let plain = rank(&candidates, &q, &[], &HashMap::new());
-        assert_eq!(plain[0].word, "feature-a");
+        assert_eq!(&*plain[0].word, "feature-a");
         let boosted = rank(
             &candidates,
             &q,
             &[],
             &HashMap::from([("feature-b".into(), 10.)]),
         );
-        assert_eq!(boosted[0].word, "feature-b");
+        assert_eq!(&*boosted[0].word, "feature-b");
         let history = vec![
             Entry {
                 command: "foo".into(),

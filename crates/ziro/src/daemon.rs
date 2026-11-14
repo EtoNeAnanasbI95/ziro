@@ -48,7 +48,14 @@ struct Session {
     batch_gen: u64,
     batch_count: usize,
     last_edit: Option<Instant>,
+    /// Buffer/cursor of the in-flight request and of the current candidates.
+    requested: Option<(String, usize)>,
+    answered: Option<(String, usize)>,
+    /// Recent completed contexts, shown immediately while compsys refreshes.
+    recent: std::collections::VecDeque<(String, Context, Vec<Candidate>)>,
 }
+const RECENT_CONTEXTS: usize = 16;
+const RECENT_MAX_CANDIDATES: usize = 2000;
 struct State {
     sessions: HashMap<String, Session>,
     history: HistoryStore,
@@ -139,6 +146,7 @@ fn request(s: &mut Session) {
         ),
     );
     s.busy = Some((s.generation, Instant::now()));
+    s.requested = Some((s.buffer.clone(), s.cursor));
     s.pending = false;
 }
 fn frame(s: &mut Session, h: &HistoryStore, c: &Config, waiting: bool) {
@@ -338,8 +346,17 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                             let key = q.cache_key(&s.buffer, &s.cwd);
                             let changed = key != s.cache_key;
                             if changed {
-                                s.cache_key = key;
                                 s.candidates.clear();
+                                s.answered = None;
+                                // Stale-while-revalidate: reuse the last answer
+                                // for this context until the worker replies.
+                                if let Some((_, context, candidates)) =
+                                    s.recent.iter().find(|(k, _, _)| *k == key)
+                                {
+                                    s.context = context.clone();
+                                    s.candidates = candidates.clone();
+                                }
+                                s.cache_key = key;
                             }
                             frame(&mut s, &st.history, &st.config, true);
                             if changed || s.candidates.is_empty() {
@@ -377,6 +394,17 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                                 {
                                     s.candidates = std::mem::take(&mut s.batch);
                                     s.context = s.batch_context.clone();
+                                    s.answered = s.requested.take();
+                                    if s.candidates.len() <= RECENT_MAX_CANDIDATES {
+                                        let key = s.cache_key.clone();
+                                        s.recent.retain(|(k, _, _)| *k != key);
+                                        s.recent.push_front((
+                                            key,
+                                            s.context.clone(),
+                                            s.candidates.clone(),
+                                        ));
+                                        s.recent.truncate(RECENT_CONTEXTS);
+                                    }
                                     frame(&mut s, &st.history, &st.config, false);
                                 }
                                 if s.pending {
@@ -536,7 +564,11 @@ pub async fn serve(path: &Path, config: Config) -> Result<(), Box<dyn std::error
                     );
                 } else if s.busy.is_none() && s.last_edit.is_some_and(|t| t.elapsed() > idle) {
                     s.last_edit = None;
-                    request(s);
+                    // Refresh only candidates computed for an earlier prefix;
+                    // re-running compsys for the same line doubles its cost.
+                    if s.answered.as_ref() != Some(&(s.buffer.clone(), s.cursor)) {
+                        request(s);
+                    }
                 }
             }
         }

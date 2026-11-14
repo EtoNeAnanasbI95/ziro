@@ -17,6 +17,7 @@ _ziro_precmd() {
     _ziro_send CTX $_ziro_gen 0 ${COLUMNS:-80} ${LINES:-24} main "$PWD" '' ''
     _ziro_ui_send CTX $_ziro_gen 0 ${COLUMNS:-80} ${LINES:-24} main "$PWD" '' ''
     _ziro_worker_start
+    _ziro_zwc_refresh
   fi
   _ziro_previous_buffer='' _ziro_previous_cursor=-1 _ziro_hidden='' _ziro_navigated=0 _ziro_explicit=0 _ziro_history_nav=0
 }

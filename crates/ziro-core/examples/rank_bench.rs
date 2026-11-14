@@ -12,17 +12,22 @@ fn main() {
         })
         .collect();
     let q = Query::parse("git checkout cf", 15);
+    // Warm up: the daemon is long-lived, and a cold CPU in powersave
+    // otherwise measures frequency ramp-up rather than ranking.
+    for _ in 0..2000 {
+        std::hint::black_box(rank(&candidates, &q, &[], &HashMap::new()));
+    }
     let mut times = vec![];
-    for _ in 0..101 {
+    for _ in 0..1001 {
         let start = Instant::now();
         let ranked = rank(&candidates, &q, &[], &HashMap::new());
         std::hint::black_box(ranked);
         times.push(start.elapsed().as_micros());
     }
     times.sort_unstable();
-    println!(
+    eprintln!(
         "rank 1000: p50={}us p95={}us p99={}us",
-        times[50], times[95], times[99]
+        times[500], times[950], times[990]
     );
-    assert!(times[95] < 1000, "ranking exceeds 1ms budget");
+    assert!(times[950] < 1000, "ranking exceeds 1ms budget");
 }

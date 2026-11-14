@@ -32,20 +32,37 @@ _ziro_capture() {
     builtin compadd -A _ziro_matches "${_ziro_args[@]}"
     local _ziro_ret=$?
     _ziro_prefix=$PREFIX _ziro_suffix=$SUFFIX _ziro_iprefix=$IPREFIX _ziro_isuffix=$ISUFFIX _ziro_quote=${compstate[quote]}
+    # Index descriptions once: a linear search per match is quadratic and
+    # dominated command-name completion (hundreds of matches).
+    local -A _ziro_dexact _ziro_dfirst
+    local _ziro_word _ziro_desc _ziro_key _ziro_word_tag _ziro_path
+    local -a _ziro_hits
+    for _ziro_desc in "${_ziro_display[@]}"; do
+      [[ -n $_ziro_desc ]] || continue
+      (( ${+_ziro_dexact[$_ziro_desc]} )) || _ziro_dexact[$_ziro_desc]=$_ziro_desc
+      _ziro_key=${_ziro_desc%%[[:space:]]*}
+      [[ -n $_ziro_key ]] && (( ! ${+_ziro_dfirst[$_ziro_key]} )) && _ziro_dfirst[$_ziro_key]=$_ziro_desc
+    done
+    local -i _ziro_same=$(( $#_ziro_display == $#_ziro_matches )) _ziro_first=$(( CURRENT == 1 ))
     for (( _ziro_i=1; _ziro_i <= $#_ziro_matches; _ziro_i++ )); do
-      local _ziro_word=${(Q)_ziro_matches[_ziro_i]} _ziro_desc='' _ziro_display_item
-      for _ziro_display_item in "${_ziro_display[@]}"; do
-        if [[ $_ziro_display_item == "$_ziro_word" || $_ziro_display_item == "$_ziro_word"[[:space:]]* ]]; then _ziro_desc=$_ziro_display_item; break; fi
-      done
-      [[ -z $_ziro_desc && $#_ziro_display == $#_ziro_matches ]] && _ziro_desc=${_ziro_display[_ziro_i]}
+      _ziro_word=${(Q)_ziro_matches[_ziro_i]} _ziro_desc=''
+      if (( $#_ziro_display )) && [[ -n $_ziro_word ]]; then
+        _ziro_desc=${_ziro_dexact[$_ziro_word]:-${_ziro_dfirst[$_ziro_word]:-}}
+        if [[ -z $_ziro_desc && $_ziro_word == *[[:space:]]* ]]; then
+          # Words with blanks: "word<space>description" cannot be keyed.
+          _ziro_hits=(${(M)_ziro_display:#${_ziro_word}[[:space:]]*})
+          _ziro_desc=${_ziro_hits[1]:-}
+        fi
+        (( _ziro_same )) && [[ -z $_ziro_desc ]] && _ziro_desc=${_ziro_display[_ziro_i]}
+      fi
       if [[ $_ziro_flags == *f* ]]; then
-        local _ziro_path="${_ziro_p}${_ziro_word}"
+        _ziro_path="${_ziro_p}${_ziro_word}"
         [[ $_ziro_path == '~/'* ]] && _ziro_path="$HOME/${_ziro_path#'~/'}"
-        if [[ -d $_ziro_path && $_ziro_word != */ ]]; then _ziro_word+=/; fi
+        if [[ $_ziro_word != */ && -d $_ziro_path ]]; then _ziro_word+=/; fi
       fi
       [[ $_ziro_word == *[$'\0\x1f\x1e']* || $_ziro_desc == *[$'\0\x1f\x1e']* ]] && continue
-      local _ziro_word_tag=$_ziro_tag
-      if (( CURRENT == 1 )); then
+      _ziro_word_tag=$_ziro_tag
+      if (( _ziro_first )); then
         if (( $+aliases[$_ziro_word] )); then _ziro_word_tag=aliases
         elif (( $+functions[$_ziro_word] )); then _ziro_word_tag=functions
         elif (( $+builtins[$_ziro_word] )); then _ziro_word_tag=builtins
@@ -100,6 +117,7 @@ _ziro_worker_init() {
 }
 _ziro_worker_main() {
   setopt extendedglob
+  _ziro_zwc_fpath
   (( COLUMNS > 0 )) || COLUMNS=80
   (( LINES > 0 )) || LINES=24
   typeset -ga precmd_functions=() preexec_functions=() zshexit_functions=()

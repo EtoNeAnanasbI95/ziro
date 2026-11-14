@@ -40,16 +40,19 @@ pub struct Context {
     pub isuffix: String,
     pub quote: String,
 }
+/// Shared immutable text: candidates are re-ranked on every keystroke, and
+/// cloning eight owned strings per candidate dominated ranking time.
+pub type Text = std::sync::Arc<str>;
 #[derive(Debug, Clone)]
 pub struct Candidate {
-    pub group: String,
-    pub tag: String,
-    pub word: String,
-    pub display: String,
-    pub description: String,
-    pub flags: String,
-    pub prefix: String,
-    pub suffix: String,
+    pub group: Text,
+    pub tag: Text,
+    pub word: Text,
+    pub display: Text,
+    pub description: Text,
+    pub flags: Text,
+    pub prefix: Text,
+    pub suffix: Text,
     pub kind: Kind,
     pub score: f64,
     pub matches: Vec<u32>,
@@ -113,12 +116,12 @@ impl Candidate {
         Self {
             group: "history".into(),
             tag: "history".into(),
-            display: word.clone(),
-            word,
+            display: word.as_str().into(),
+            word: word.into(),
             description: "history".into(),
-            flags: String::new(),
-            prefix: String::new(),
-            suffix: String::new(),
+            flags: "".into(),
+            prefix: "".into(),
+            suffix: "".into(),
             kind: Kind::History,
             score,
             matches: vec![],

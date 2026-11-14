@@ -377,7 +377,11 @@ pub(crate) mod tests {
                 let mut line = String::new();
                 for c in 0..cols.get() {
                     let cell = screen.cell(r, c).unwrap();
-                    let text = if cell.has_contents() { cell.contents() } else { " " };
+                    let text = if cell.has_contents() {
+                        cell.contents()
+                    } else {
+                        " "
+                    };
                     let style = Style::from_cell(cell);
                     if style == Style::from_spec("fg=default,bg=default") && text == " " {
                         line.push(' ');

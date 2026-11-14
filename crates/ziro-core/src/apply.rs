@@ -34,7 +34,7 @@ pub fn apply_candidate(
 ) -> Applied {
     if candidate.kind == Kind::History {
         return Applied {
-            buffer: candidate.word.clone(),
+            buffer: candidate.word.to_string(),
             cursor: candidate.word.chars().count(),
         };
     }
