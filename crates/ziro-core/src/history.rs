@@ -50,6 +50,7 @@ pub struct HistoryStore {
     /// Commands started but not finished: id -> (command, ts, cwd id).
     running: HashMap<String, (String, f64, u32)>,
     t0: Option<f64>,
+    rows: u64,
 }
 impl HistoryStore {
     pub fn open(path: &Path) -> rusqlite::Result<Self> {
@@ -68,6 +69,7 @@ impl HistoryStore {
             cwds: HashMap::new(),
             running: HashMap::new(),
             t0: None,
+            rows: 0,
         };
         store.reload()?;
         Ok(store)
@@ -86,6 +88,7 @@ impl HistoryStore {
             .collect::<rusqlite::Result<Vec<_>>>()?
         };
         self.index.clear();
+        self.rows = rows.len() as u64;
         self.t0 = rows.iter().map(|r| r.1).reduce(f64::max);
         for (command, ts, cwd, exit) in rows {
             self.add(command, ts, &cwd, exit.is_some_and(|x| x != 0));
@@ -121,6 +124,7 @@ impl HistoryStore {
             params![id, ts, cwd, command],
         )?;
         if inserted > 0 {
+            self.rows += 1;
             self.add(command.to_owned(), ts, cwd, false);
             let cwd = self.cwd_id(cwd);
             self.running
@@ -195,9 +199,7 @@ impl HistoryStore {
             .take_while(move |(c, _)| c.starts_with(prefix))
     }
     pub fn len(&self) -> rusqlite::Result<u64> {
-        self.db.query_row("SELECT count(*) FROM history", [], |r| {
-            r.get::<_, i64>(0).map(|n| n as u64)
-        })
+        Ok(self.rows)
     }
     pub fn is_empty(&self) -> rusqlite::Result<bool> {
         Ok(self.len()? == 0)

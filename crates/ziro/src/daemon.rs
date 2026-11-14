@@ -62,6 +62,10 @@ struct State {
     config: Config,
     ctx_us: Vec<u64>,
     trace_us: Vec<u64>,
+    /// Stats changed since the last write of stats.json.
+    stats_dirty: bool,
+    /// Wakes the timer task when a session starts waiting on something.
+    wake: Rc<tokio::sync::Notify>,
 }
 pub fn now() -> f64 {
     SystemTime::now()
@@ -265,6 +269,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                         s.worker = Some(tx.clone());
                         if s.pending {
                             request(s);
+                            st.wake.notify_one();
                         }
                     } else {
                         break 'connection;
@@ -289,6 +294,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                     for x in m.fields.iter().skip(1) {
                         if let Ok(x) = x.parse() {
                             st.trace_us.push(x);
+                            st.stats_dirty = true;
                         }
                     }
                     let excess = st.trace_us.len().saturating_sub(10000);
@@ -364,6 +370,8 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                             }
                             s.last_edit = Some(Instant::now());
                             st.ctx_us.push(started.elapsed().as_micros() as u64);
+                            st.stats_dirty = true;
+                            st.wake.notify_one();
                             let excess = st.ctx_us.len().saturating_sub(10000);
                             st.ctx_us.drain(..excess);
                         }
@@ -518,6 +526,8 @@ pub async fn serve(path: &Path, config: Config) -> Result<(), Box<dyn std::error
         config,
         ctx_us: vec![],
         trace_us: vec![],
+        stats_dirty: true,
+        wake: Rc::new(tokio::sync::Notify::new()),
     }));
     let reload_state = state.clone();
     let mut hup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
@@ -541,16 +551,27 @@ pub async fn serve(path: &Path, config: Config) -> Result<(), Box<dyn std::error
         }
     });
     let timer_state = state.clone();
+    let wake = state.lock().await.wake.clone();
     tokio::task::spawn_local(async move {
-        let mut tick = tokio::time::interval(Duration::from_millis(20));
         let mut last_stats = Instant::now();
+        let mut waiting = true;
         loop {
-            tick.tick().await;
+            // Poll at 20ms only while a session waits on a worker or an idle
+            // refresh; otherwise sleep until an edit arrives.
+            if waiting {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            } else {
+                tokio::select! {
+                    _ = wake.notified() => {}
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {}
+                }
+            }
             let mut st = timer_state.lock().await;
             let timeout = Duration::from_millis(st.config.worker.timeout_ms);
             let idle = Duration::from_millis(st.config.worker.refresh_idle_ms);
-            if last_stats.elapsed() > Duration::from_secs(1) {
+            if st.stats_dirty && last_stats.elapsed() > Duration::from_secs(1) {
                 persist_stats(&st);
+                st.stats_dirty = false;
                 last_stats = Instant::now();
             }
             for s in st.sessions.values_mut() {
@@ -571,6 +592,11 @@ pub async fn serve(path: &Path, config: Config) -> Result<(), Box<dyn std::error
                     }
                 }
             }
+            waiting = st.stats_dirty
+                || st
+                    .sessions
+                    .values()
+                    .any(|s| s.busy.is_some() || s.last_edit.is_some());
         }
     });
     tracing::info!(socket=%path.display(),"daemon ready");
