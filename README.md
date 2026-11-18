@@ -1,5 +1,13 @@
 # ziro
 
+![ziro: меню подсказок у курсора в zsh](docs/demo.gif)
+
+На гифке:
+- `git ch`: подкоманды с описаниями, Tab / Shift+Tab листают, Enter вставляет, и сразу появляется меню веток;
+- `tar -`: опции с нечёткой фильтрацией;
+- серая подсказка из истории, принимается клавишей →;
+- `pacman -S fire`: список пакетов из штатного completion zsh.
+
 Меню живых подсказок zsh и ghost-text из истории. Кандидаты собирает compsys
 в отдельном zpty-процессе, Rust-демон хранит историю, ранжирует подсказки и
 готовит кадры для ZLE. Текст меню находится в `POSTDISPLAY`, отдельно от команды.
@@ -146,3 +154,17 @@ cargo run --release -p ziro-core --example rank_bench
 
 Проверка oh-my-zsh предполагает установленный `~/.oh-my-zsh` с плагинами
 `git`, `zsh-syntax-highlighting`, `fast-syntax-highlighting`, `zsh-autosuggestions`.
+
+## Демо-гифка
+
+`docs/demo.gif` генерируется скриптом `scripts/demo/record.py`. Он запускает
+изолированный zsh с ziro в tmux: временные история, конфиг и состояние,
+выдуманный git-репозиторий. Затем «печатает» сценарий, снимает экран после
+каждого шага, рендерит кадры headless-Chrome и склеивает их через ffmpeg.
+
+```sh
+python3 scripts/demo/record.py            # перезаписывает docs/demo.gif
+```
+
+Нужны tmux, oh-my-zsh, установленный `ziro`, google-chrome или chromium,
+ffmpeg, ImageMagick, шрифты JetBrains Mono и Noto Color Emoji.
