@@ -32,7 +32,7 @@ config_section!(Ghost {
 });
 config_section!(Keys { accept: String = "^I".into(), arrows: String = "menu".into(), enter_menu: String = "^@".into(), next: Vec<String> = vec!["^[[B".into(), "^[OB".into()], prev: Vec<String> = vec!["^[[A".into(), "^[OA".into(), "^[[Z".into()], dismiss: String = "^[".into() });
 config_section!(Worker {
-    timeout_ms: u64 = 500,
+    timeout_ms: u64 = 3000,
     refresh_idle_ms: u64 = 80
 });
 config_section!(History {

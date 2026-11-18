@@ -17,6 +17,15 @@ _ziro_fallback() {
     fi
   fi
 }
+# enter_accepts=auto: while a word is being typed the first item is preselected
+# and Enter inserts it. Not after a space (Enter must still run the command)
+# and not when inserting would change nothing but a trailing space.
+_ziro_auto() {
+  [[ $_ziro_enter_accepts == auto ]] && (( _ziro_visible && !_ziro_stale && _ziro_selected == 1 )) || return 1
+  [[ -n $LBUFFER && $LBUFFER[-1] != [[:space:]] ]] || return 1
+  [[ ${_ziro_buffers[1]%% } != "$BUFFER" ]]
+}
+_ziro_highlighted() { (( _ziro_navigated )) || _ziro_auto; }
 _ziro_accept() {
   (( _ziro_visible && !_ziro_stale )) || return 1
   BUFFER=$_ziro_buffers[_ziro_selected] CURSOR=$_ziro_cursors[_ziro_selected]
@@ -44,13 +53,25 @@ _ziro_dispatch() {
   if (( !_ziro_visible || _ziro_stale )) || [[ $_ziro_arrows == explicit && $_ziro_explicit == 0 ]]; then _ziro_fallback; return; fi
   case $action in
     accept) _ziro_accept ;;
-    enter) if [[ $_ziro_enter_accepts == always || ( $_ziro_enter_accepts == explicit && $_ziro_navigated == 1 ) ]]; then _ziro_accept; else _ziro_clear; _ziro_fallback; fi ;;
+    enter) if [[ $_ziro_enter_accepts == always ]] || { [[ $_ziro_enter_accepts != never ]] && _ziro_highlighted; }; then _ziro_accept; else _ziro_clear; _ziro_fallback; fi ;;
     next|prev|page_up|page_down)
+      # Nothing highlighted yet: Tab selects row 1 locally; Shift+Tab asks the
+      # daemon (its selection is the first item) to wrap to the last one.
+      if ! _ziro_highlighted && [[ $action == next ]]; then
+        _ziro_navigated=1 _ziro_selected=1; _ziro_paint; zle -R; return 0
+      fi
+      if ! _ziro_highlighted; then
+        _ziro_await_select=1
+      else
+        # Within the visible window move locally; at its edges (scroll or
+        # wrap-around) the daemon's next frame decides the selection.
+        case $action in
+          next) if (( _ziro_selected < $#_ziro_buffers )); then (( _ziro_selected++ )); else _ziro_await_select=1; fi ;;
+          prev) if (( _ziro_selected > 1 )); then (( _ziro_selected-- )); else _ziro_await_select=1; fi ;;
+          *) _ziro_await_select=1 ;;
+        esac
+      fi
       _ziro_navigated=1
-      case $action in
-        next) (( _ziro_selected < $#_ziro_buffers )) && (( _ziro_selected++ )) ;;
-        prev) (( _ziro_selected > 1 )) && (( _ziro_selected-- )) ;;
-      esac
       _ziro_send KEY $_ziro_gen "$action"; _ziro_paint; zle -R ;;
     *) _ziro_fallback ;;
   esac
@@ -77,11 +98,13 @@ _ziro_bind_all() {
     functions[_ziro_key_$action]="_ziro_dispatch $action"
     zle -N _ziro_key_$action
   done
-  local accept=${1:-'^I'} enter=${2:-'^@'} dismiss=${3:-'^['}
+  local accept=${1-'^I'} enter=${2:-'^@'} dismiss=${3:-'^['}
   shift $(( $# >= 3 ? 3 : $# ))
-  _ziro_bind "$accept" accept; _ziro_bind "$enter" enter_menu; _ziro_bind "$dismiss" dismiss
-  _ziro_bind '^M' enter; _ziro_bind '^[[C' ghost; _ziro_bind '^[OC' ghost; _ziro_bind '^[[F' ghost; _ziro_bind '^[[1;5C' ghost_word
-  _ziro_bind '^[[5~' page_up; _ziro_bind '^[[6~' page_down
+  # next/prev first: a key listed there wins over `accept` (e.g. Tab used for cycling).
   action=next
   for key in "$@"; do [[ $key == '|' ]] && { action=prev; continue; }; _ziro_bind "$key" "$action"; done
+  [[ -n $accept ]] && _ziro_bind "$accept" accept
+  _ziro_bind "$enter" enter_menu; _ziro_bind "$dismiss" dismiss
+  _ziro_bind '^M' enter; _ziro_bind '^[[C' ghost; _ziro_bind '^[OC' ghost; _ziro_bind '^[[F' ghost; _ziro_bind '^[[1;5C' ghost_word
+  _ziro_bind '^[[5~' page_up; _ziro_bind '^[[6~' page_down
 }

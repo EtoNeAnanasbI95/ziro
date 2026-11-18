@@ -46,7 +46,7 @@ impl Message {
         let count = fields.len();
         let valid = match kind.as_str() {
             "HELLO" => count == 6,
-            "CTX" => count == 8,
+            "CTX" => count == 8 || count == 9, // 9th: origin column (optional)
             "KEY" => count == 2,
             "HIST_START" => count == 4,
             "HIST_END" => count == 3,

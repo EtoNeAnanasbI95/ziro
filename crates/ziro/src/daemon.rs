@@ -31,6 +31,8 @@ struct Session {
     buffer: String,
     cursor: usize,
     cols: usize,
+    /// Screen column where the edit buffer starts (prompt width), if known.
+    origin: Option<usize>,
     keymap: String,
     cwd: String,
     worker_cwd: String,
@@ -188,7 +190,7 @@ fn frame(s: &mut Session, h: &HistoryStore, c: &Config, waiting: bool) {
         );
         return;
     }
-    let f = layout::layout(
+    let f = layout::layout_at(
         s.generation,
         &s.buffer,
         &q,
@@ -197,6 +199,7 @@ fn frame(s: &mut Session, h: &HistoryStore, c: &Config, waiting: bool) {
         s.selected,
         ghost,
         s.cols,
+        s.origin,
         c,
     );
     send(&s.shell, f.message());
@@ -330,6 +333,7 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                             }
                             s.flags = m.field(6).into();
                             s.buffer = m.field(7).into();
+                            s.origin = m.field(8).parse().ok();
                             if s.worker_failed
                                 && !s.buffer.is_empty()
                                 && !s.flags.contains('h')
@@ -422,11 +426,21 @@ async fn client(stream: UnixStream, state: Rc<Mutex<State>>) {
                         }
                         "KEY" if !worker && m.number::<u64>(0).ok() == Some(s.generation) => {
                             match m.field(1) {
+                                // Tab / Shift+Tab cycle through the list.
                                 "next" => {
-                                    s.selected =
-                                        (s.selected + 1).min(s.ranked.len().saturating_sub(1))
+                                    s.selected = if s.selected + 1 >= s.ranked.len() {
+                                        0
+                                    } else {
+                                        s.selected + 1
+                                    }
                                 }
-                                "prev" => s.selected = s.selected.saturating_sub(1),
+                                "prev" => {
+                                    s.selected = if s.selected == 0 {
+                                        s.ranked.len().saturating_sub(1)
+                                    } else {
+                                        s.selected - 1
+                                    }
+                                }
                                 "page_down" => {
                                     s.selected = (s.selected + st.config.menu.max_items)
                                         .min(s.ranked.len().saturating_sub(1))

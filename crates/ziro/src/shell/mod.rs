@@ -5,6 +5,7 @@ mod terminal;
 
 use screen::Compositor;
 use startup::Startup;
+pub use startup::plugin_path;
 use std::{
     collections::VecDeque,
     io::{self, Read, Write},

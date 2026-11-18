@@ -9,25 +9,29 @@ _ziro_capture() {
   typeset -ga _ziro_records=()
   typeset -g _ziro_prefix=$PREFIX _ziro_suffix=$SUFFIX _ziro_iprefix=$IPREFIX _ziro_isuffix=$ISUFFIX _ziro_quote=${compstate[quote]}
   compadd() {
-    # Keep output-array probes intact: completion helpers use them internally.
-    local _ziro_arg
-    for _ziro_arg in "$@"; do
-      if [[ $_ziro_arg == -[ADO] ]]; then builtin compadd "$@"; return; fi
-    done
     local -a _ziro_matches _ziro_display _ziro_args
     local _ziro_group='' _ziro_tag=${curtag:-} _ziro_dname='' _ziro_p='' _ziro_s='' _ziro_flags='' _ziro_opt _ziro_i
-    _ziro_args=("$@")
+    # Parse options only: stop at `-`/`--` or the first word. Callers like
+    # _yay pass ~150k package names here, so never walk the whole argv.
     for (( _ziro_i=1; _ziro_i <= $#; _ziro_i++ )); do
       _ziro_opt=${argv[_ziro_i]}
-      [[ $_ziro_opt == -- ]] && break
+      [[ $_ziro_opt == -(|-) || $_ziro_opt != -* ]] && break
+      [[ $_ziro_opt == *f* ]] && _ziro_flags+=f
+      [[ $_ziro_opt == *q* ]] && _ziro_flags+=q
       case $_ziro_opt in
+        # Output-array probes: completion helpers use them internally.
+        -[ADO]|-?*[ADO]) builtin compadd "$@"; return ;;
         -d|-?*d) (( _ziro_i++ )); _ziro_dname=${argv[_ziro_i]} ;;
         -[JV]|-?*[JV]) (( _ziro_i++ )); _ziro_group=${argv[_ziro_i]} ;;
-        -[Pp]) (( _ziro_i++ )); _ziro_p+=${argv[_ziro_i]} ;;
-        -[Ss]) (( _ziro_i++ )); _ziro_s+=${argv[_ziro_i]} ;;
-        -*) [[ $_ziro_opt == *f* ]] && _ziro_flags+=f; [[ $_ziro_opt == *q* ]] && _ziro_flags+=q ;;
+        -[Pp]|-?*[Pp]) (( _ziro_i++ )); _ziro_p+=${argv[_ziro_i]} ;;
+        -[Ss]|-?*[Ss]) (( _ziro_i++ )); _ziro_s+=${argv[_ziro_i]} ;;
+        # -o takes an optional order list (nosort, match, numeric, reverse).
+        -o|-?*o) [[ ${argv[_ziro_i+1]} == (match|nosort|numeric|reverse)* ]] && (( _ziro_i++ )) ;;
+        # Remaining options that take an argument: skip it.
+        -[iIWXxrRFME]|-?*[iIWXxrRFME]) (( _ziro_i++ )) ;;
       esac
     done
+    _ziro_args=("$@")
     [[ -n $_ziro_dname ]] && _ziro_display=("${(@P)_ziro_dname}")
     builtin compadd -A _ziro_matches "${_ziro_args[@]}"
     local _ziro_ret=$?

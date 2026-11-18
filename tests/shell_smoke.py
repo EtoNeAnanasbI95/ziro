@@ -96,7 +96,10 @@ bindkey '^Xc' _ziro_test_cd
         send('\x03', .2)
         send('ziro-custom ', .5)
         assert snapshot()[2]=='1'
+        # Nothing is highlighted before navigation: the first ↓ selects row 1,
+        # the second moves to row 2 (sent raw so explicit mode keeps the menu active).
         send('\x1b[B', .2)
+        os.write(master, b'\x1b[B'); drain(.2)
         send('\r', .2)
         assert snapshot()[0]=='ziro-custom beta ', snapshot()
         send('\x03', .2)

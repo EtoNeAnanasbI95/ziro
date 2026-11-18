@@ -61,7 +61,8 @@ _ziro_frame() {
     _ziro_buffers+=("$f[$((offset+2))]") _ziro_cursors+=("$f[$((offset+3))]")
     (( offset+=4 ))
   done
-  if (( _ziro_navigated )) && [[ $prior_buffers == "${(pj:\x1f:)_ziro_buffers}" ]]; then _ziro_selected=$prior_selected; fi
+  if (( _ziro_navigated && !_ziro_await_select )) && [[ $prior_buffers == "${(pj:\x1f:)_ziro_buffers}" ]]; then _ziro_selected=$prior_selected; fi
+  _ziro_await_select=0
   _ziro_paint
 }
 _ziro_paint() {
@@ -74,7 +75,7 @@ _ziro_paint() {
     [[ $style == *bg=* ]] && continue
     _ziro_highlights+=("$(( ${#BUFFER}+start )) $(( ${#BUFFER}+end )) $style$memo")
   done
-  if (( _ziro_visible && !_ziro_overlay_mode )); then
+  if (( _ziro_visible && !_ziro_overlay_mode )) && _ziro_highlighted; then
     _ziro_highlights+=("$(( ${#BUFFER}+_ziro_row_starts[_ziro_selected] )) $(( ${#BUFFER}+_ziro_row_ends[_ziro_selected] )) bg=4,fg=15$memo")
   fi
   region_highlight+=("${_ziro_highlights[@]}")

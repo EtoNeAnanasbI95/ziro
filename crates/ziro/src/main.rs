@@ -123,9 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
         }
         Action::Init { .. } => {
-            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../plugin/ziro.plugin.zsh")
-                .canonicalize()?;
+            let path = shell::plugin_path()?;
             println!(
                 "source '{}'",
                 path.display().to_string().replace('\'', "'\\''")

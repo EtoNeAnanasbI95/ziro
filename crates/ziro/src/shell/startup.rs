@@ -11,7 +11,7 @@ pub struct Startup {
 }
 /// $ZIRO_PLUGIN, then a plugin next to an installed binary
 /// (`<prefix>/bin/ziro` → `<prefix>/share/ziro/plugin`), then the source tree.
-fn plugin_path() -> io::Result<PathBuf> {
+pub fn plugin_path() -> io::Result<PathBuf> {
     let mut candidates = vec![];
     if let Some(p) = std::env::var_os("ZIRO_PLUGIN") {
         candidates.push(PathBuf::from(p));

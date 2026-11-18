@@ -9,6 +9,7 @@ typeset -g _ziro_binary=${ZIRO_BIN:-${commands[ziro]:-${_ziro_root:h}/target/deb
 typeset -g _ziro_socket=${ZIRO_SOCKET:-${XDG_RUNTIME_DIR:-/tmp/ziro-$UID}${XDG_RUNTIME_DIR:+/ziro}/daemon.sock}
 typeset -g _ziro_session="$$-$EPOCHREALTIME" _ziro_fd='' _ziro_tail='' _ziro_out='' _ziro_pty_fd='' _ziro_worker_cwd=''
 typeset -g _ziro_previous_buffer='' _ziro_previous_cursor=-1 _ziro_previous_cols=0 _ziro_hidden='' _ziro_ghost='' _ziro_history_buffer='' _ziro_hist_id='' _ziro_hist_start=0
+typeset -gi _ziro_dsr=1 _ziro_origin_col=-1 _ziro_await_select=0
 typeset -gi _ziro_gen=0 _ziro_inflight=0 _ziro_visible=0 _ziro_stale=0 _ziro_selected=1 _ziro_navigated=0 _ziro_explicit=0 _ziro_bound=0 _ziro_ghost_len=0 _ziro_history_nav=0 _ziro_history_search_cursor=0
 typeset -g _ziro_ui_fd='' _ziro_ui_out=''
 typeset -gi _ziro_overlay_mode=0
@@ -19,6 +20,7 @@ for _ziro_lib in overlay ipc render zwc worker hooks keys compat; do source "$_z
 unset _ziro_lib
 _ziro_overlay_init
 _ziro_compat
+_ziro_wrap_async_prompt
 zle -N _ziro_read
 add-zsh-hook precmd _ziro_precmd
 add-zsh-hook preexec _ziro_preexec
@@ -35,5 +37,6 @@ _ziro_add_hook() {
     add-zle-hook-widget "$1" "$fn"
   fi
 }
+_ziro_add_hook line-init _ziro_line_init
 _ziro_add_hook line-pre-redraw _ziro_redraw
 _ziro_add_hook line-finish _ziro_finish

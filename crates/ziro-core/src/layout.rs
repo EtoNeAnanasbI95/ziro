@@ -100,6 +100,35 @@ pub fn layout(
     cols: usize,
     config: &Config,
 ) -> Frame {
+    layout_at(
+        generation, buffer, query, context, candidates, selected, ghost, cols, None, config,
+    )
+}
+/// Screen column of the cursor: `origin` is the column where the edit buffer
+/// starts (prompt width); continuation lines start at column 0.
+fn cursor_column(buffer: &str, cursor: usize, origin: usize, cols: usize) -> usize {
+    let before: String = buffer.chars().take(cursor).collect();
+    let col = match before.rfind('\n') {
+        Some(i) => before[i + 1..].width(),
+        None => origin + before.width(),
+    };
+    col % cols.max(1)
+}
+/// Like [`layout`], but with `origin` (screen column of the buffer start) the
+/// menu is anchored under the cursor instead of the word start.
+#[allow(clippy::too_many_arguments)]
+pub fn layout_at(
+    generation: u64,
+    buffer: &str,
+    query: &Query,
+    context: &Context,
+    candidates: &[Candidate],
+    selected: usize,
+    ghost: &str,
+    cols: usize,
+    origin: Option<usize>,
+    config: &Config,
+) -> Frame {
     let ghost = ghost.to_owned();
     let mut f = Frame {
         generation,
@@ -142,8 +171,11 @@ pub fn layout(
         .min(config.menu.max_width.max(5))
         .min((content_width + 4).max(20));
     let inner = width.saturating_sub(4);
-    let before: String = buffer.chars().take(query.start).collect();
-    let indent = before.width().min(cols.saturating_sub(width + 1));
+    let anchor = match origin {
+        Some(origin) => cursor_column(buffer, query.cursor, origin, cols),
+        None => buffer.chars().take(query.start).collect::<String>().width(),
+    };
+    let indent = anchor.min(cols.saturating_sub(width + 1));
     let pad = " ".repeat(indent);
 
     let border = config.menu.border != "none";
@@ -220,13 +252,19 @@ pub fn layout(
             f.highlights
                 .push(format!("{} {} {}", end - 1, end, config.theme.border));
         }
+        // Selection covers only the inside of the box, not the indent or the border.
+        let (row_start, row_end) = if border {
+            (start + indent + 1, end - 1)
+        } else {
+            (start + indent, end)
+        };
         if i == selected {
             f.highlights
-                .push(format!("{start} {end} {}", config.theme.selected));
+                .push(format!("{row_start} {row_end} {}", config.theme.selected));
         }
         f.rows.push(Row {
-            start,
-            end,
+            start: row_start,
+            end: row_end,
             applied: apply_candidate(buffer, query, context, c),
         });
     }
@@ -271,6 +309,12 @@ impl Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cursor_column_counts_prompt_and_lines() {
+        assert_eq!(cursor_column("git ch", 6, 8, 80), 14);
+        assert_eq!(cursor_column("echo a\nbc", 9, 8, 80), 2);
+        assert_eq!(cursor_column("abcdef", 6, 76, 80), 2);
+    }
     #[test]
     fn widths_and_character_offsets() {
         for cols in [5, 20, 40, 200] {

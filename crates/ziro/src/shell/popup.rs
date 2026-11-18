@@ -164,7 +164,11 @@ impl Popup {
         let selected = m.number::<usize>(2)?;
         let highlights = m.number::<usize>(5)?;
         let text: Vec<char> = m.field(4).chars().collect();
+        // Row ranges cover the inside of the box; this renderer works on whole
+        // screen lines, so widen each range to its line. The inner range is
+        // kept to recognise the selected-row highlight.
         let mut rows = vec![];
+        let mut inner_rows = vec![];
         for i in 0..n {
             let base = 6 + highlights + i * 4;
             let a = m.number::<usize>(base)?;
@@ -172,7 +176,16 @@ impl Popup {
             if a > b || b > text.len() {
                 return Err(ProtocolError("invalid popup row".into()));
             }
-            rows.push((a, b));
+            inner_rows.push((a, b));
+            let line_start = text[..a]
+                .iter()
+                .rposition(|&c| c == '\n')
+                .map_or(0, |p| p + 1);
+            let line_end = text[b..]
+                .iter()
+                .position(|&c| c == '\n')
+                .map_or(text.len(), |p| b + p);
+            rows.push((line_start, line_end));
         }
         let indent = text[rows[0].0..rows[0].1]
             .iter()
@@ -186,7 +199,7 @@ impl Popup {
             let b = fields.next().and_then(|v| v.parse::<usize>().ok());
             let style = Style::from_spec(fields.next().unwrap_or(""));
             if let (Some(a), Some(b)) = (a, b) {
-                if (a, b) == rows[selected] {
+                if Some(&(a, b)) == inner_rows.get(selected) {
                     selected_style = style;
                 } else {
                     spans.push((a, b, style));

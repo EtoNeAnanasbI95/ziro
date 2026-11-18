@@ -79,6 +79,10 @@ ziro shell --login    # login-оболочка
 
 - ↑/↓, Shift+Tab: выбор строки меню; Tab: вставка.
 - Enter: вставка после явной навигации, иначе обычное выполнение.
+  С `enter_accepts = "auto"` первый пункт выделен сразу, пока набирается слово,
+  и Enter вставляет его; после пробела или Esc Enter выполняет команду.
+- Меню ставится под курсором: колонку начала строки ввода плагин один раз
+  на промпт спрашивает у терминала (DSR), с учётом асинхронного git-промпта oh-my-zsh.
 - Esc: скрытие меню до изменения буфера.
 - →, End: принятие ghost-text; Ctrl+→: принятие следующего слова.
 - PgUp/PgDn: прокрутка. Ctrl+Space: явный вход в меню.
@@ -98,13 +102,13 @@ ziro отключает zsh-autosuggestions, поскольку оба плаг�
 ```toml
 [menu]
 max_items = 8
-enter_accepts = "explicit" # explicit | always | never
+enter_accepts = "explicit" # explicit | auto | always | never
 
 [keys]
 arrows = "menu"           # menu | explicit
 
 [worker]
-timeout_ms = 500
+timeout_ms = 3000
 refresh_idle_ms = 80
 
 [ghost]
