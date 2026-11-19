@@ -38,8 +38,11 @@ _ziro_read() {
   sysread -i $_ziro_fd -s 65536 -t 0 chunk 2>/dev/null || { [[ $? == 5 ]] && _ziro_disconnect; return; }
   _ziro_tail+=$chunk
   (( ${#_ziro_tail} <= 1048576 )) || { _ziro_disconnect; return; }
-  while [[ $_ziro_tail == *$'\0'* ]]; do
-    record=${_ziro_tail%%$'\0'*}; _ziro_tail=${_ziro_tail#*$'\0'}
+  # One split instead of ${tail%%$'\0'*} per record: that pattern is
+  # quadratic in zsh (~20 ms on a 1 KB frame, on every cursor move).
+  local -a records=("${(@ps:\0:)_ziro_tail}")
+  _ziro_tail=$records[-1]; records[-1]=()
+  for record in "${records[@]}"; do
     local -a f=("${(@ps:\x1f:)record}")
     case $f[1] in
       CFG) _ziro_arrows=$f[2] _ziro_enter_accepts=$f[3]; _ziro_cfg_keys=("${f[@]:4}") ;;

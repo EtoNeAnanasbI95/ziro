@@ -98,9 +98,10 @@ _ziro_worker_read() {
 _ziro_worker_process_chunk() {
   local _ziro_record
   _ziro_worker_tail+=$1
-  while [[ $_ziro_worker_tail == *$'\0'* ]]; do
-    _ziro_record=${_ziro_worker_tail%%$'\0'*}
-    _ziro_worker_tail=${_ziro_worker_tail#*$'\0'}
+  # One split instead of ${tail%%$'\0'*}: that pattern is quadratic in zsh.
+  local -a _ziro_records=("${(@ps:\0:)_ziro_worker_tail}")
+  _ziro_worker_tail=$_ziro_records[-1]; _ziro_records[-1]=()
+  for _ziro_record in "${_ziro_records[@]}"; do
     local -a _ziro_fields=("${(@ps:\x1f:)_ziro_record}")
     [[ $_ziro_fields[1] == REQ ]] || continue
     _ziro_worker_gen=$_ziro_fields[2]

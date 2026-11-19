@@ -2,6 +2,8 @@
 [[ -o interactive && ${ZIRO_DISABLE:-0} != 1 && -z ${ISTERM:-} ]] || return 0
 autoload -Uz is-at-least add-zsh-hook add-zle-hook-widget
 is-at-least 5.8 || return 0
+# Checked once: region_highlight memo= needs 5.9 (is-at-least is slow per redraw).
+is-at-least 5.9 && typeset -gi _ziro_memo=1 || typeset -gi _ziro_memo=0
 (( $+functions[_ziro_precmd] )) && return 0
 zmodload zsh/mathfunc && zmodload zsh/net/socket && zmodload zsh/system && zmodload zsh/zpty && zmodload zsh/datetime && zmodload zsh/zselect || return 0
 typeset -g _ziro_root=${${(%):-%N}:A:h} _ziro_us=$'\x1f'

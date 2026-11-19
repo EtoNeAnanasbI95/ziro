@@ -1,5 +1,5 @@
 _ziro_remove_highlights() {
-  if is-at-least 5.9; then
+  if (( _ziro_memo )); then
     region_highlight=("${(@)region_highlight:#*memo=ziro*}")
   else
     local -a retained=(); local item
@@ -15,10 +15,10 @@ _ziro_invalidate() {
   _ziro_remove_highlights
   if (( _ziro_ghost_len )); then
     local shift=$_ziro_ghost_len spec start end style
-    local -a kept=()
+    local -a kept=() parts
     POSTDISPLAY=${POSTDISPLAY[$((shift+1)),-1]}
     for spec in "${_ziro_base_highlights[@]}"; do
-      start=${spec%% *}; spec=${spec#* }; end=${spec%% *}; style=${spec#* }
+      parts=(${=spec}); start=$parts[1] end=$parts[2] style="${parts[3,-1]}"
       (( end <= shift )) && continue
       kept+=("$(( start-shift )) $(( end-shift )) $style")
     done
@@ -68,9 +68,10 @@ _ziro_frame() {
 _ziro_paint() {
   _ziro_remove_highlights
   local spec start end style memo=''
-  is-at-least 5.9 && memo=' memo=ziro'
+  local -a parts
+  (( _ziro_memo )) && memo=' memo=ziro'
   for spec in "${_ziro_base_highlights[@]}"; do
-    start=${spec%% *}; spec=${spec#* }; end=${spec%% *}; style=${spec#* }
+    parts=(${=spec}); start=$parts[1] end=$parts[2] style="${parts[3,-1]}"
     (( _ziro_overlay_mode && end>_ziro_ghost_len )) && continue
     [[ $style == *bg=* ]] && continue
     _ziro_highlights+=("$(( ${#BUFFER}+start )) $(( ${#BUFFER}+end )) $style$memo")
